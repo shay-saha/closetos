@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /apps/api
+    schedule:
+      interval: weekly
+    groups:
+      spring:
+        patterns: ['org.springframework*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
