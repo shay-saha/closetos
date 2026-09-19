@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: "25"
           cache: maven
           cache-dependency-path: apps/api/pom.xml
       - name: Verify formatting, module boundaries, and PostgreSQL integration
@@ -42,3 +42,54 @@ jobs:
       - uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: critical
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: apps/api/pom.xml
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: python3 scripts/prepare-local-env.py
+      - run: docker compose up -d --wait
+      - run: python3 scripts/wait-for-http.py http://localhost:8081/realms/closetos/.well-known/openid-configuration
+      - name: Start local API
+        run: |
+          ./scripts/run-api.sh > /tmp/closetos-api.log 2>&1 &
+          python3 scripts/wait-for-http.py http://localhost:8080/actuator/health
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: |
+            playwright-report
+            test-results
