@@ -23,14 +23,16 @@ import tools.jackson.databind.node.ObjectNode;
 @RequestMapping("/api/v1/garments")
 class GarmentController {
     private final GarmentService garments;
+    private final GarmentPresenter presenter;
 
     @GetMapping
     GarmentPage list(@Valid @ModelAttribute GarmentFilter filter) {
-        return garments.list(filter);
+        return presenter.page(garments.list(filter));
     }
 
-    GarmentController(GarmentService garments) {
+    GarmentController(GarmentService garments, GarmentPresenter presenter) {
         this.garments = garments;
+        this.presenter = presenter;
     }
 
     @PostMapping
@@ -41,12 +43,12 @@ class GarmentController {
 
     @GetMapping("/{id}")
     GarmentDetails get(@PathVariable UUID id) {
-        return garments.get(id);
+        return presenter.detail(garments.get(id));
     }
 
     @PatchMapping("/{id}")
     GarmentDetails patch(@PathVariable UUID id, @RequestBody ObjectNode patch) {
-        return garments.patch(id, patch);
+        return presenter.detail(garments.patch(id, patch));
     }
 
     @PostMapping("/{id}/status")

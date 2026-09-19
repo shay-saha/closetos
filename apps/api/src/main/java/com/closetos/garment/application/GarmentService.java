@@ -23,7 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 @Service
-public class GarmentService {
+public class GarmentService implements com.closetos.garment.api.GarmentAccess {
     private static final Set<String> METADATA_FIELDS =
             Arrays.stream(GarmentMetadata.class.getRecordComponents())
                     .map(component -> component.getName())
@@ -34,6 +34,7 @@ public class GarmentService {
     private final JsonMapper json;
     private final Validator validator;
     private final CatalogueQuery catalogue;
+    private final com.closetos.media.api.MediaAccess media;
 
     public GarmentService(
             GarmentRepository garments,
@@ -41,13 +42,15 @@ public class GarmentService {
             Clock clock,
             JsonMapper json,
             Validator validator,
-            CatalogueQuery catalogue) {
+            CatalogueQuery catalogue,
+            com.closetos.media.api.MediaAccess media) {
         this.garments = garments;
         this.wardrobe = wardrobe;
         this.clock = clock;
         this.json = json;
         this.validator = validator;
         this.catalogue = catalogue;
+        this.media = media;
     }
 
     @Transactional
@@ -60,7 +63,7 @@ public class GarmentService {
 
     @Transactional
     public GarmentDetails get(UUID id) {
-        return owned(id).details();
+        return ownedEntity(id).details();
     }
 
     @Transactional
@@ -70,7 +73,7 @@ public class GarmentService {
 
     @Transactional
     public GarmentDetails patch(UUID id, ObjectNode patch) {
-        Garment garment = owned(id);
+        Garment garment = ownedEntity(id);
         JsonNode version = patch.get("version");
         if (version == null
                 || !version.isIntegralNumber()
@@ -98,25 +101,49 @@ public class GarmentService {
         }
         validate(metadata);
         garment.update(metadata, version.asLong(), clock.instant());
+        garment.confirmMetadata();
         return garments.saveAndFlush(garment).details();
     }
 
     @Transactional
     public GarmentDetails status(UUID id, GarmentStatus status, long version) {
-        Garment garment = owned(id);
+        Garment garment = ownedEntity(id);
         garment.changeStatus(status, version, clock.instant());
         return garments.saveAndFlush(garment).details();
     }
 
     @Transactional
     public void delete(UUID id, long version) {
-        Garment garment = owned(id);
+        Garment garment = ownedEntity(id);
         garment.update(garment.metadata(), version, clock.instant());
+        media.deleteGarmentImages(id, wardrobe.currentWardrobeId());
         garments.delete(garment);
         garments.flush();
     }
 
-    private Garment owned(UUID id) {
+    @Override
+    @Transactional
+    public GarmentDetails createDraft(UUID wardrobeId) {
+        if (!wardrobe.currentWardrobeId().equals(wardrobeId))
+            throw DomainException.notFound("Wardrobe");
+        return garments.saveAndFlush(Garment.draft(wardrobeId, clock.instant())).details();
+    }
+
+    @Override
+    @Transactional
+    public GarmentDetails owned(UUID garment) {
+        return ownedEntity(garment).details();
+    }
+
+    @Override
+    @Transactional
+    public void processingState(
+            UUID garment, UUID wardrobeId, com.closetos.media.api.ProcessingStatus state) {
+        garments.findByIdAndWardrobeId(garment, wardrobeId)
+                .ifPresent(item -> item.processingState(state, clock.instant()));
+    }
+
+    private Garment ownedEntity(UUID id) {
         return garments.findByIdAndWardrobeId(id, wardrobe.currentWardrobeId())
                 .orElseThrow(() -> DomainException.notFound("Garment"));
     }

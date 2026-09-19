@@ -1,5 +1,7 @@
 package com.closetos.garment.api;
 
+import com.closetos.media.api.MediaAssets;
+import com.closetos.media.api.ProcessingStatus;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,4 +18,20 @@ public record GarmentDetails(
         BigDecimal costPerWear,
         long version,
         Instant createdAt,
-        Instant updatedAt) {}
+        Instant updatedAt,
+        MediaAssets assets) {
+    public GarmentDetails withAssets(MediaAssets media) {
+        return new GarmentDetails(
+                id,
+                metadata,
+                status,
+                processingStatus,
+                wearCount,
+                lastWornAt,
+                costPerWear,
+                version,
+                createdAt,
+                updatedAt,
+                media);
+    }
+}

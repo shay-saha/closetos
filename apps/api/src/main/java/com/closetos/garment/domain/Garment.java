@@ -3,7 +3,7 @@ package com.closetos.garment.domain;
 import com.closetos.garment.api.GarmentDetails;
 import com.closetos.garment.api.GarmentMetadata;
 import com.closetos.garment.api.GarmentStatus;
-import com.closetos.garment.api.ProcessingStatus;
+import com.closetos.media.api.ProcessingStatus;
 import com.closetos.platform.api.DomainException;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -45,6 +45,43 @@ public class Garment {
         this.processingStatus = ProcessingStatus.READY;
         this.createdAt = now;
         this.updatedAt = now;
+    }
+
+    public static Garment draft(UUID wardrobe, Instant now) {
+        var metadata =
+                new GarmentMetadata(
+                        "New piece",
+                        com.closetos.garment.api.GarmentCategory.OTHER,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        java.util.List.of(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        java.util.List.of(),
+                        java.util.List.of(),
+                        java.util.List.of(),
+                        null,
+                        null,
+                        null,
+                        null);
+        var garment = new Garment(wardrobe, metadata, now);
+        garment.processingStatus = ProcessingStatus.AWAITING_UPLOAD;
+        return garment;
+    }
+
+    public void processingState(ProcessingStatus next, Instant now) {
+        if (processingStatus == ProcessingStatus.READY) return;
+        processingStatus = next;
+        updatedAt = now;
+    }
+
+    public void confirmMetadata() {
+        processingStatus = ProcessingStatus.READY;
     }
 
     public UUID id() {
@@ -92,6 +129,7 @@ public class Garment {
                 cost,
                 version,
                 createdAt,
-                updatedAt);
+                updatedAt,
+                null);
     }
 }

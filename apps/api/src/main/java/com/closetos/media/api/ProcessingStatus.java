@@ -1,4 +1,4 @@
-package com.closetos.garment.api;
+package com.closetos.media.api;
 
 public enum ProcessingStatus {
     DRAFT,
