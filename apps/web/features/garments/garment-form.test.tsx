@@ -1,0 +1,27 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { expect, it, vi } from "vitest";
+import { GarmentForm } from "./garment-form";
+
+it("focuses invalid name and never submits empty garment data", async () => {
+  const user = userEvent.setup();
+  const submit = vi.fn();
+  render(<GarmentForm submit={submit} pending={false} />);
+  await user.click(screen.getByRole("button", { name: "Add to your wardrobe" }));
+  expect(await screen.findByText("Give this piece a name.")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Piece name *" })).toHaveFocus();
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("submits user-entered canonical metadata", async () => {
+  const user = userEvent.setup();
+  const submit = vi.fn();
+  render(<GarmentForm submit={submit} pending={false} />);
+  await user.type(screen.getByRole("textbox", { name: "Piece name *" }), "Cream knit");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Category *" }), "TOP");
+  await user.click(screen.getByRole("button", { name: "Add to your wardrobe" }));
+  expect(submit).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "Cream knit", category: "TOP" }),
+    expect.anything(),
+  );
+});

@@ -1,0 +1,26 @@
+"use client";
+
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import type { Garment, GarmentPage } from "./types";
+
+export function useGarments(filters: string) {
+  return useInfiniteQuery({
+    queryKey: ["garments", filters],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => {
+      const params = new URLSearchParams(filters);
+      params.set("limit", "60");
+      if (pageParam) params.set("cursor", pageParam);
+      return api<GarmentPage>(`garments?${params}`, { signal });
+    },
+    getNextPageParam: (page) => page.nextCursor,
+  });
+}
+
+export function useGarment(id: string) {
+  return useQuery({
+    queryKey: ["garment", id],
+    queryFn: ({ signal }) => api<Garment>(`garments/${id}`, { signal }),
+  });
+}
