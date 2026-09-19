@@ -1,0 +1,10 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/closetos
+closetos:
+  auth:
+    client-id: closetos-web
+    provider: oidc

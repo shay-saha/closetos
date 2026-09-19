@@ -1,0 +1,27 @@
+{
+  "realm": "closetos",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "resetPasswordAllowed": true,
+  "clients": [{
+    "clientId": "closetos-web",
+    "enabled": true,
+    "publicClient": true,
+    "standardFlowEnabled": true,
+    "directAccessGrantsEnabled": false,
+    "redirectUris": ["http://localhost:3000/api/auth/callback/wardrobe"],
+    "webOrigins": ["http://localhost:3000"],
+    "attributes": { "pkce.code.challenge.method": "S256" },
+    "protocolMappers": [{
+      "name": "closetos-audience",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.client.audience": "closetos-web",
+        "access.token.claim": "true",
+        "id.token.claim": "false"
+      }
+    }]
+  }]
+}
