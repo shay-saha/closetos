@@ -61,6 +61,16 @@ class WardrobeHttpTest extends PostgresIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void renameRequiresAnExplicitVersion() throws Exception {
+        mvc.perform(
+                        patch("/api/v1/wardrobes/current")
+                                .with(jwt())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"name\":\"New name\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     private JsonNode current(String subject) throws Exception {
         String body =
                 mvc.perform(

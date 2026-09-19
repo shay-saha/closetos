@@ -3,6 +3,7 @@ package com.closetos.wardrobe.api;
 import com.closetos.wardrobe.application.WardrobeService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,5 +31,6 @@ class WardrobeController {
         return wardrobe.rename(request.name(), request.version());
     }
 
-    record RenameWardrobe(@NotBlank @Size(max = 120) String name, @PositiveOrZero long version) {}
+    record RenameWardrobe(
+            @NotBlank @Size(max = 120) String name, @NotNull @PositiveOrZero Long version) {}
 }

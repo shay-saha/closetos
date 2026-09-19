@@ -12,10 +12,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -40,6 +47,23 @@ class ProblemHandler {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     ResponseEntity<ProblemDetail> conflict(HttpServletRequest request) {
         return problem(409, "CONFLICT", "This item changed. Refresh before saving again.", request);
+    }
+
+    @ExceptionHandler({
+        HttpRequestMethodNotSupportedException.class,
+        HttpMediaTypeNotSupportedException.class,
+        HttpMediaTypeNotAcceptableException.class,
+        MissingServletRequestParameterException.class,
+        NoResourceFoundException.class,
+        HandlerMethodValidationException.class
+    })
+    ResponseEntity<ProblemDetail> httpError(Exception exception, HttpServletRequest request) {
+        int status = ((ErrorResponse) exception).getStatusCode().value();
+        return problem(
+                status,
+                status == 404 ? "NOT_FOUND" : "VALIDATION",
+                HttpStatus.valueOf(status).getReasonPhrase(),
+                request);
     }
 
     @ExceptionHandler(Exception.class)

@@ -183,6 +183,34 @@ class GarmentHttpTest extends PostgresIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void invalidHttpRequestsKeepTheirClientErrorStatus() throws Exception {
+        String id =
+                create("http-errors", "{\"name\":\"Knit\",\"category\":\"TOP\"}")
+                        .get("id")
+                        .asText();
+        mvc.perform(as(delete("/api/v1/garments/" + id), "http-errors"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION"));
+        mvc.perform(as(delete("/api/v1/garments/" + id).param("version", "-1"), "http-errors"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(put("/api/v1/garments/" + id), "http-errors"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.requestId").isNotEmpty());
+        mvc.perform(
+                        as(post("/api/v1/garments"), "http-errors")
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .content("Knit"))
+                .andExpect(status().isUnsupportedMediaType());
+        mvc.perform(as(get("/api/v1/unknown"), "http-errors")).andExpect(status().isNotFound());
+        mvc.perform(
+                        as(post("/api/v1/garments"), "http-errors")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"name\":\"Knit\",\"category\":\"TOP\",\"wearCount\":42}"))
+                .andExpect(status().isBadRequest());
+    }
+
     private Set<String> allPages(String subject, GarmentSort sort, int limit) throws Exception {
         Set<String> ids = new HashSet<>();
         String cursor = null;

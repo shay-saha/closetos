@@ -65,7 +65,7 @@ class GarmentController {
     }
 
     @DeleteMapping("/{id}")
-    ResponseEntity<Void> delete(@PathVariable UUID id, @RequestParam long version) {
+    ResponseEntity<Void> delete(@PathVariable UUID id, @RequestParam @PositiveOrZero long version) {
         garments.delete(id, version);
         return ResponseEntity.noContent().build();
     }
