@@ -49,3 +49,26 @@ it("keeps an unknown purchase price empty when reviewing a photo draft", async (
     expect.anything(),
   );
 });
+
+it("keeps initial tags intact and allows clearing a suggested list", async () => {
+  const user = userEvent.setup();
+  const submit = vi.fn();
+  render(
+    <GarmentForm
+      initial={{
+        name: "Summer dress",
+        category: "DRESS",
+        seasonTags: ["Summer"],
+        styleTags: ["Minimal", "Classic"],
+      }}
+      submit={submit}
+      pending={false}
+    />,
+  );
+  await user.clear(screen.getByRole("textbox", { name: "Style tags" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(submit).toHaveBeenCalledWith(
+    expect.objectContaining({ seasonTags: ["Summer"], styleTags: [] }),
+    expect.anything(),
+  );
+});

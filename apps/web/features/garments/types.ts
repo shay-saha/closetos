@@ -40,10 +40,10 @@ export const metadataSchema = z
     pattern: z.string().max(80).nullable().optional(),
     length: z.string().max(60).nullable().optional(),
     formality: z.string().max(60).nullable().optional(),
-    secondaryColours: z.array(z.string()).optional(),
-    seasonTags: z.array(z.string()).optional(),
-    occasionTags: z.array(z.string()).optional(),
-    styleTags: z.array(z.string()).optional(),
+    secondaryColours: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
+    seasonTags: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
+    occasionTags: z.array(z.string().trim().min(1).max(60)).max(24).optional(),
+    styleTags: z.array(z.string().trim().min(1).max(60)).max(24).optional(),
     purchasePrice: z.number().nonnegative().nullable().optional(),
     purchaseCurrency: z
       .string()

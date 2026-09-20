@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { categories, categoryNames, metadataSchema, type GarmentMetadata } from "./types";
@@ -11,16 +11,19 @@ export function GarmentForm({
   pending,
   error,
   cancel,
+  submitLabel,
 }: {
   initial?: GarmentMetadata;
   submit: (metadata: GarmentMetadata) => void;
   pending: boolean;
   error?: Error | null;
   cancel?: () => void;
+  submitLabel?: string;
 }) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<GarmentMetadata>({
     resolver: zodResolver(metadataSchema),
@@ -97,6 +100,52 @@ export function GarmentForm({
       </div>
       <div className="field-row">
         <label>
+          Pattern
+          <input {...register("pattern")} placeholder="Plain, striped, floral…" />
+        </label>
+        <label>
+          Length
+          <input {...register("length")} placeholder="Cropped, midi, full length…" />
+        </label>
+      </div>
+      {(
+        [
+          ["secondaryColours", "Secondary colours"],
+          ["seasonTags", "Seasons"],
+          ["styleTags", "Style tags"],
+          ["occasionTags", "Occasions"],
+        ] as const
+      ).map(([name, label]) => (
+        <Controller
+          key={name}
+          name={name}
+          control={control}
+          render={({ field, fieldState }) => (
+            <label>
+              {label}
+              <input
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                defaultValue={field.value?.join(", ") ?? ""}
+                onChange={(event) =>
+                  field.onChange(
+                    event.target.value
+                      .split(",")
+                      .map((tag) => tag.trim())
+                      .filter(Boolean),
+                  )
+                }
+                placeholder="Separate with commas"
+                aria-invalid={!!fieldState.error}
+              />
+              {fieldState.error && <span className="field-error">{fieldState.error.message}</span>}
+            </label>
+          )}
+        />
+      ))}
+      <div className="field-row">
+        <label>
           Purchase price
           <input
             type="number"
@@ -145,9 +194,27 @@ export function GarmentForm({
           {error.message}
         </p>
       )}
+      {Object.keys(errors).some(
+        (field) =>
+          ![
+            "name",
+            "purchasePrice",
+            "purchaseCurrency",
+            "secondaryColours",
+            "seasonTags",
+            "styleTags",
+            "occasionTags",
+          ].includes(field),
+      ) && (
+        <p role="alert" className="field-error">
+          Check the highlighted fields. Some details are too long or have an invalid format.
+        </p>
+      )}
       <div className="form-actions">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving your piece…" : initial ? "Save changes" : "Add to your wardrobe"}
+          {pending
+            ? "Saving your piece…"
+            : (submitLabel ?? (initial ? "Save changes" : "Add to your wardrobe"))}
         </Button>
         {cancel && (
           <Button type="button" variant="secondary" onClick={cancel}>
