@@ -70,42 +70,42 @@ class ProcessingResult(WireModel):
 Confidence = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 
 
-class TextSuggestion(WireModel):
-    value: str | None = Field(max_length=200)
+class Suggestion[T](WireModel):
+    model_config = ConfigDict(strict=True)
+    value: T
     confidence: Confidence
 
 
-class ListSuggestion(WireModel):
-    value: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=12)
-    confidence: Confidence
-
-
-class CategorySuggestion(WireModel):
-    value: Literal["TOP", "BOTTOM", "DRESS", "OUTERWEAR", "SHOES", "BAG", "ACCESSORY", "OTHER"]
-    confidence: Confidence
+type ShortText = Annotated[str, Field(min_length=1, max_length=60)] | None
+type MediumText = Annotated[str, Field(min_length=1, max_length=80)] | None
+type LongerText = Annotated[str, Field(min_length=1, max_length=120)] | None
+type Tags = list[Annotated[str, Field(min_length=1, max_length=60)]]
 
 
 class MetadataSuggestions(WireModel):
-    category: CategorySuggestion
-    subcategory: TextSuggestion
-    primary_colour: TextSuggestion
-    secondary_colours: ListSuggestion
-    pattern: TextSuggestion
-    material_estimate: TextSuggestion
-    style_tags: ListSuggestion
-    season_tags: ListSuggestion
-    occasion_tags: ListSuggestion
-    formality: TextSuggestion
-    warmth_level: TextSuggestion
-    waterproof_estimate: TextSuggestion
-    fit: TextSuggestion
-    brand: TextSuggestion
-    notes: TextSuggestion
+    category: Suggestion[
+        Literal[
+            "TOP", "BOTTOM", "DRESS", "OUTERWEAR", "SHOES", "BAG", "JEWELLERY", "ACCESSORY", "OTHER"
+        ]
+    ]
+    subcategory: Suggestion[MediumText]
+    primary_colour: Suggestion[ShortText]
+    secondary_colours: Suggestion[Annotated[Tags, Field(max_length=12)]]
+    pattern: Suggestion[MediumText]
+    material_estimate: Suggestion[LongerText]
+    length: Suggestion[ShortText]
+    style_tags: Suggestion[Annotated[Tags, Field(max_length=24)]]
+    season_tags: Suggestion[Annotated[Tags, Field(max_length=12)]]
+    occasion_tags: Suggestion[Annotated[Tags, Field(max_length=24)]]
+    formality: Suggestion[ShortText]
+    brand: Suggestion[LongerText]
+    notes: Suggestion[Annotated[str, Field(min_length=1, max_length=4000)] | None]
 
 
 class AnalysisDocument(WireModel):
     image_id: UUID
     pipeline_version: str
     model_id: str
+    model_version: str | None = None
     prompt_version: str
     suggestions: MetadataSuggestions
