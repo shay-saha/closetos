@@ -195,4 +195,14 @@ public class MediaService implements MediaAccess {
                 .param("wardrobe", wardrobe)
                 .update();
     }
+
+    @Override
+    @Transactional
+    public void confirmImages(UUID garment, UUID wardrobe) {
+        jdbc.sql(
+                        "UPDATE garment_image SET processing_status = 'READY', updated_at = now() WHERE garment_id = :garment AND wardrobe_id = :wardrobe AND processing_status = 'READY_FOR_REVIEW'")
+                .param("garment", garment)
+                .param("wardrobe", wardrobe)
+                .update();
+    }
 }

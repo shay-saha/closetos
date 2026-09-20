@@ -25,4 +25,6 @@ public interface MediaAccess {
     void deleteGarmentImages(UUID garment, UUID wardrobe);
 
     void deleteImage(UUID image, UUID wardrobe);
+
+    void confirmImages(UUID garment, UUID wardrobe);
 }

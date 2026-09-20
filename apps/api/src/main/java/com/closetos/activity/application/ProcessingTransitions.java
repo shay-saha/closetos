@@ -1,6 +1,8 @@
 package com.closetos.activity.application;
 
 import com.closetos.garment.api.GarmentAccess;
+import com.closetos.intelligence.api.AnalysisDocument;
+import com.closetos.intelligence.api.SuggestionAccess;
 import com.closetos.media.api.ImageRecord;
 import com.closetos.media.api.ProcessingAccess;
 import com.closetos.media.api.ProcessingResult;
@@ -14,10 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProcessingTransitions {
     private final ProcessingAccess processing;
     private final GarmentAccess garments;
+    private final SuggestionAccess suggestions;
 
-    public ProcessingTransitions(ProcessingAccess processing, GarmentAccess garments) {
+    public ProcessingTransitions(
+            ProcessingAccess processing, GarmentAccess garments, SuggestionAccess suggestions) {
         this.processing = processing;
         this.garments = garments;
+        this.suggestions = suggestions;
     }
 
     @Transactional
@@ -48,13 +53,17 @@ public class ProcessingTransitions {
     }
 
     @Transactional
-    public void completed(ProcessingResult result, String eventId) {
+    public void completed(ProcessingResult result, String eventId, AnalysisDocument analysis) {
         var job = processing.context(result.jobId());
-        if (job.isPresent() && processing.complete(result, eventId))
+        if (job.isPresent() && processing.complete(result, eventId)) {
+            if (analysis != null)
+                suggestions.record(
+                        job.get().jobId(), job.get().garmentId(), job.get().wardrobeId(), analysis);
             garments.processingState(
                     job.get().garmentId(),
                     job.get().wardrobeId(),
                     ProcessingStatus.READY_FOR_REVIEW);
+        }
     }
 
     @Transactional

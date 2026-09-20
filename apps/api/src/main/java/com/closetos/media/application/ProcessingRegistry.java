@@ -10,6 +10,7 @@ import com.closetos.platform.api.DomainException;
 import com.closetos.platform.api.OutboxAccess;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -72,8 +73,8 @@ public class ProcessingRegistry implements ProcessingAccess {
                         UUID.randomUUID().toString());
         jdbc.sql(
                         """
-                INSERT INTO processing_job (id, image_id, pipeline_version, state, attempt_count)
-                VALUES (:id, :image, :pipeline, 'UPLOADED', :attempt)
+                INSERT INTO processing_job (id, image_id, pipeline_version, state, attempt_count, analysis_status)
+                VALUES (:id, :image, :pipeline, 'UPLOADED', :attempt, 'PENDING')
                 """)
                 .param("id", jobId)
                 .param("image", image.id())
@@ -105,7 +106,7 @@ public class ProcessingRegistry implements ProcessingAccess {
         ImageRecord image = media.ownedImage(id, wardrobe);
         var latest =
                 jdbc.sql(
-                                "SELECT state, attempt_count, failure_code, failure_detail FROM processing_job WHERE image_id = :id ORDER BY attempt_count DESC LIMIT 1")
+                                "SELECT state, attempt_count, failure_code, failure_detail, analysis_status, analysis_failure FROM processing_job WHERE image_id = :id ORDER BY attempt_count DESC LIMIT 1")
                         .param("id", id)
                         .query(JobState.class)
                         .optional();
@@ -117,7 +118,9 @@ public class ProcessingRegistry implements ProcessingAccess {
                 latest.map(JobState::failureCode).orElse(null),
                 latest.map(JobState::failureDetail).orElse(null),
                 image.processingStatus() == ProcessingStatus.FAILED
-                        && latest.map(job -> job.attemptCount() < 5).orElse(false));
+                        && latest.map(job -> job.attemptCount() < 5).orElse(false),
+                latest.map(JobState::analysisStatus).orElse("NOT_REQUESTED"),
+                latest.map(JobState::analysisFailure).orElse(null));
     }
 
     @Override
@@ -161,10 +164,13 @@ public class ProcessingRegistry implements ProcessingAccess {
                         .query(UUID.class)
                         .single();
         if (!latest.equals(job.jobId())) return false;
+        var analysis = AnalysisOutcome.from(result);
         int updated =
                 jdbc.sql(
-                                "UPDATE processing_job SET state = 'READY_FOR_REVIEW', completed_at = now() WHERE id = :id AND state IN ('UPLOADED', 'PROCESSING_MEDIA', 'ANALYSING')")
+                                "UPDATE processing_job SET state = 'READY_FOR_REVIEW', completed_at = now(), analysis_status = :analysis, analysis_failure = :analysisFailure WHERE id = :id AND state IN ('UPLOADED', 'PROCESSING_MEDIA', 'ANALYSING')")
                         .param("id", job.jobId())
+                        .param("analysis", analysis.status())
+                        .param("analysisFailure", analysis.failure())
                         .update();
         if (updated == 0) return false;
         var isolated = result.assets().get("isolated");
@@ -250,6 +256,24 @@ public class ProcessingRegistry implements ProcessingAccess {
                 == 1;
     }
 
+    private record AnalysisOutcome(String status, String failure) {
+        static AnalysisOutcome from(ProcessingResult result) {
+            if (result.analysisKey() != null) return new AnalysisOutcome("READY", null);
+            if ("ANALYSIS_NOT_CONFIGURED".equals(result.analysisFailure()))
+                return new AnalysisOutcome("NOT_CONFIGURED", "ANALYSIS_NOT_CONFIGURED");
+            String failure = result.analysisFailure();
+            if (failure == null
+                    || !Set.of("ANALYSIS_UNAVAILABLE", "INVALID_ANALYSIS_OUTPUT").contains(failure))
+                failure = "ANALYSIS_UNAVAILABLE";
+            return new AnalysisOutcome("FAILED", failure);
+        }
+    }
+
     private record JobState(
-            String state, int attemptCount, String failureCode, String failureDetail) {}
+            String state,
+            int attemptCount,
+            String failureCode,
+            String failureDetail,
+            String analysisStatus,
+            String analysisFailure) {}
 }

@@ -6,7 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
-class GarmentPresenter {
+public class GarmentPresenter {
     private final MediaAccess media;
     private final WardrobeAccess wardrobe;
 
@@ -15,7 +15,7 @@ class GarmentPresenter {
         this.wardrobe = wardrobe;
     }
 
-    GarmentDetails detail(GarmentDetails garment) {
+    public GarmentDetails detail(GarmentDetails garment) {
         return garment.withAssets(
                 media.assetsFor(List.of(garment.id()), wardrobe.currentWardrobeId())
                         .get(garment.id()));

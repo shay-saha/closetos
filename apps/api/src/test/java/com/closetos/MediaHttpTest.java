@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +44,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @AutoConfigureMockMvc
 class MediaHttpTest extends PostgresIntegrationTest {
@@ -247,6 +249,294 @@ class MediaHttpTest extends PostgresIntegrationTest {
         assertThat(second).noneMatch(event -> event.id().equals(first.getFirst().id()));
         queue.published(first.getFirst());
         for (var event : second) queue.failed(event, "Test retry", false);
+    }
+
+    @Test
+    void analysisStaysSeparateUntilAnOwnerAcceptsOrCorrectsIt() throws Exception {
+        String owner = "suggestion-accept";
+        Fixture fixture = analysed(owner, null);
+        String path = "/api/v1/garments/" + fixture.image().garmentId();
+        mvc.perform(as(get(path), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("New piece"))
+                .andExpect(jsonPath("$.category").value("OTHER"))
+                .andExpect(jsonPath("$.material").isEmpty());
+        mvc.perform(as(get("/api/v1/garments").param("category", "TOP"), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
+        JsonNode suggestion = response(as(get(path + "/suggestions"), owner)).get(0);
+        assertThat(suggestion.path("modelId").asText()).isEqualTo("test-analysis-model");
+        assertThat(suggestion.path("modelVersion").asText()).isEqualTo("2026-test");
+        assertThat(suggestion.path("promptVersion").asText()).isEqualTo("garment-metadata-2");
+        assertThat(
+                        suggestion
+                                .path("suggestions")
+                                .path("materialEstimate")
+                                .path("confidence")
+                                .asDouble())
+                .isEqualTo(.61);
+        long version = response(as(get(path), owner)).path("version").asLong();
+        ObjectNode request =
+                json.createObjectNode()
+                        .put("suggestionId", suggestion.path("id").asText())
+                        .put("suggestionVersion", 0)
+                        .put("garmentVersion", version);
+        request.set(
+                "corrections",
+                json.createObjectNode()
+                        .put("name", "Favourite olive shirt")
+                        .put("material", "Cotton"));
+        mvc.perform(
+                        as(post(path + "/suggestions/accept"), owner)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(request.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Favourite olive shirt"))
+                .andExpect(jsonPath("$.category").value("TOP"))
+                .andExpect(jsonPath("$.primaryColourName").value("Olive"))
+                .andExpect(jsonPath("$.material").value("Cotton"))
+                .andExpect(jsonPath("$.processingStatus").value("READY"));
+        mvc.perform(
+                        as(
+                                get("/api/v1/garments")
+                                        .param("category", "TOP")
+                                        .param("colour", "Olive")
+                                        .param("tag", "Minimal"),
+                                owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("Favourite olive shirt"));
+        mvc.perform(as(get(path + "/suggestions"), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("ACCEPTED"))
+                .andExpect(jsonPath("$[0].acceptedAt").isNotEmpty());
+        mvc.perform(
+                        as(post(path + "/suggestions/accept"), owner)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(request.toString()))
+                .andExpect(status().isConflict());
+        assertThat(processing.snapshot(fixture.image().id(), fixture.image().wardrobeId()).state())
+                .isEqualTo(ProcessingStatus.READY);
+    }
+
+    @Test
+    void rejectionAndStaleAcceptanceCannotChangeCanonicalDetails() throws Exception {
+        String owner = "suggestion-stale";
+        Fixture fixture = analysed(owner, null);
+        String path = "/api/v1/garments/" + fixture.image().garmentId();
+        JsonNode suggestion = response(as(get(path + "/suggestions"), owner)).get(0);
+        long version = response(as(get(path), owner)).path("version").asLong();
+        mvc.perform(
+                        as(patch(path), owner)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        json.createObjectNode()
+                                                .put("name", "My own details")
+                                                .put("version", version)
+                                                .toString()))
+                .andExpect(status().isOk());
+        ObjectNode request =
+                json.createObjectNode()
+                        .put("suggestionId", suggestion.path("id").asText())
+                        .put("suggestionVersion", 0)
+                        .put("garmentVersion", version);
+        request.set("corrections", json.createObjectNode());
+        mvc.perform(
+                        as(post(path + "/suggestions/accept"), owner)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(request.toString()))
+                .andExpect(status().isConflict());
+        mvc.perform(as(get(path + "/suggestions"), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+        request.remove("garmentVersion");
+        request.remove("corrections");
+        mvc.perform(
+                        as(post(path + "/suggestions/reject"), owner)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(request.toString()))
+                .andExpect(status().isNoContent());
+        mvc.perform(as(get(path), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("My own details"))
+                .andExpect(jsonPath("$.category").value("OTHER"));
+        mvc.perform(as(get(path + "/suggestions"), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("REJECTED"));
+    }
+
+    @Test
+    void suggestionReadsAndDecisionsCannotCrossOwnersOrGarments() throws Exception {
+        Fixture fixture = analysed("suggestion-owner", null);
+        String path = "/api/v1/garments/" + fixture.image().garmentId();
+        JsonNode suggestion = response(as(get(path + "/suggestions"), "suggestion-owner")).get(0);
+        mvc.perform(as(get(path + "/suggestions"), "suggestion-intruder"))
+                .andExpect(status().isNotFound());
+        ObjectNode reject =
+                json.createObjectNode()
+                        .put("suggestionId", suggestion.path("id").asText())
+                        .put("suggestionVersion", 0);
+        mvc.perform(
+                        as(post(path + "/suggestions/reject"), "suggestion-intruder")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(reject.toString()))
+                .andExpect(status().isNotFound());
+        Fixture own = uploaded("suggestion-intruder");
+        mvc.perform(
+                        as(
+                                        post(
+                                                "/api/v1/garments/"
+                                                        + own.image().garmentId()
+                                                        + "/suggestions/reject"),
+                                        "suggestion-intruder")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(reject.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void invalidAnalysisPreservesVerifiedPhotoAndManualReview() throws Exception {
+        for (String mutation :
+                new String[] {
+                    "confidence",
+                    "category",
+                    "extraField",
+                    "missingField",
+                    "wrongImage",
+                    "coercedValue",
+                    "wrongKey"
+                }) {
+            String owner = "analysis-invalid-" + mutation;
+            Fixture fixture = analysed(owner, mutation);
+            var snapshot = processing.snapshot(fixture.image().id(), fixture.image().wardrobeId());
+            assertThat(snapshot.state()).isEqualTo(ProcessingStatus.READY_FOR_REVIEW);
+            assertThat(snapshot.analysisStatus()).isEqualTo("FAILED");
+            assertThat(snapshot.analysisFailure()).isEqualTo("INVALID_ANALYSIS_OUTPUT");
+            String path = "/api/v1/garments/" + fixture.image().garmentId();
+            mvc.perform(as(get(path), owner))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.assets.cardUrl").isNotEmpty());
+            mvc.perform(as(get(path + "/suggestions"), owner))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$").isEmpty());
+        }
+    }
+
+    @Test
+    void invalidReviewCorrectionsRollBackTheDecisionAndPhotoState() throws Exception {
+        String owner = "suggestion-invalid-correction";
+        Fixture fixture = analysed(owner, null);
+        String path = "/api/v1/garments/" + fixture.image().garmentId();
+        JsonNode suggestion = response(as(get(path + "/suggestions"), owner)).get(0);
+        ObjectNode request =
+                json.createObjectNode()
+                        .put("suggestionId", suggestion.path("id").asText())
+                        .put("suggestionVersion", 0)
+                        .put(
+                                "garmentVersion",
+                                response(as(get(path), owner)).path("version").asLong());
+        for (ObjectNode invalid :
+                new ObjectNode[] {
+                    json.createObjectNode().put("name", ""),
+                    json.createObjectNode().put("wearCount", 500),
+                    json.createObjectNode().put("purchasePrice", -1)
+                }) {
+            request.set("corrections", invalid);
+            mvc.perform(
+                            as(post(path + "/suggestions/accept"), owner)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(request.toString()))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(as(get(path + "/suggestions"), owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+        assertThat(processing.snapshot(fixture.image().id(), fixture.image().wardrobeId()).state())
+                .isEqualTo(ProcessingStatus.READY_FOR_REVIEW);
+    }
+
+    private Fixture analysed(String owner, String mutation) throws Exception {
+        Fixture fixture = uploaded(owner);
+        ProcessingResult media = verifiedResult(fixture.job());
+        String key = fixture.job().outputPrefix() + "analysis.json";
+        ObjectNode document = analysisDocument(fixture.job());
+        ObjectNode fields = (ObjectNode) document.get("suggestions");
+        if ("confidence".equals(mutation))
+            ((ObjectNode) fields.get("materialEstimate")).put("confidence", 1.1);
+        if ("category".equals(mutation))
+            ((ObjectNode) fields.get("category")).put("value", "INVENTED");
+        if ("extraField".equals(mutation))
+            fields.set(
+                    "purchasePrice",
+                    json.createObjectNode().put("value", 500).put("confidence", 1));
+        if ("missingField".equals(mutation)) fields.remove("length");
+        if ("wrongImage".equals(mutation)) document.put("imageId", UUID.randomUUID().toString());
+        if ("coercedValue".equals(mutation)) ((ObjectNode) fields.get("brand")).put("value", 5);
+        when(storage.readJson(key)).thenReturn(document.toString());
+        if ("wrongKey".equals(mutation)) key = "another-owner/analysis.json";
+        var result =
+                new ProcessingResult(
+                        media.jobId(),
+                        media.imageId(),
+                        media.pipelineVersion(),
+                        media.sourceChecksumSha256(),
+                        media.assets(),
+                        key,
+                        null,
+                        media.foregroundFraction(),
+                        media.segmentationModel());
+        results.accept(result, "analysis-result:" + fixture.job().jobId());
+        results.accept(result, "analysis-result:" + fixture.job().jobId());
+        return fixture;
+    }
+
+    private ObjectNode analysisDocument(WorkflowJob job) {
+        ObjectNode root =
+                json.createObjectNode()
+                        .put("imageId", job.imageId().toString())
+                        .put("pipelineVersion", job.pipelineVersion())
+                        .put("modelId", "test-analysis-model")
+                        .put("modelVersion", "2026-test")
+                        .put("promptVersion", "garment-metadata-2");
+        ObjectNode fields = json.createObjectNode();
+        for (String name :
+                new String[] {
+                    "category",
+                    "subcategory",
+                    "primaryColour",
+                    "secondaryColours",
+                    "pattern",
+                    "materialEstimate",
+                    "length",
+                    "formality",
+                    "seasonTags",
+                    "styleTags",
+                    "occasionTags",
+                    "brand",
+                    "notes"
+                }) {
+            ObjectNode field = json.createObjectNode().put("confidence", .9);
+            if (name.endsWith("Tags") || name.equals("secondaryColours"))
+                field.set("value", json.createArrayNode());
+            else field.putNull("value");
+            fields.set(name, field);
+        }
+        ((ObjectNode) fields.get("category")).put("value", "TOP");
+        ((ObjectNode) fields.get("primaryColour")).put("value", "Olive");
+        ((ObjectNode) fields.get("materialEstimate"))
+                .put("value", "Polyester")
+                .put("confidence", .61);
+        ((ObjectNode) fields.get("styleTags")).set("value", json.createArrayNode().add("Minimal"));
+        root.set("suggestions", fields);
+        return root;
+    }
+
+    private JsonNode response(MockHttpServletRequestBuilder request) throws Exception {
+        return json.readTree(
+                mvc.perform(request)
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString());
     }
 
     private Fixture uploaded(String subject) throws Exception {

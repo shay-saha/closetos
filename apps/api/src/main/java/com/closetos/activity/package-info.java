@@ -1,6 +1,7 @@
 @org.springframework.modulith.ApplicationModule(
         allowedDependencies = {
             "media :: api",
+            "intelligence :: api",
             "garment :: api",
             "identity :: api",
             "wardrobe :: api",

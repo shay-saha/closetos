@@ -27,5 +27,7 @@ public interface ProcessingAccess {
             int attemptCount,
             String failureCode,
             String failureDetail,
-            boolean canRetry) {}
+            boolean canRetry,
+            String analysisStatus,
+            String analysisFailure) {}
 }

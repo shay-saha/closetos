@@ -44,6 +44,12 @@ public class CatalogueQuery {
         match(
                 conditions,
                 parameters,
+                "processing_status = :processingStatus",
+                "processingStatus",
+                filter.processingStatus() == null ? null : filter.processingStatus().name());
+        match(
+                conditions,
+                parameters,
                 "lower(subcategory) = lower(:subcategory)",
                 "subcategory",
                 filter.subcategory());

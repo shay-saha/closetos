@@ -1,5 +1,6 @@
 package com.closetos.garment.api;
 
+import com.closetos.media.api.ProcessingStatus;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -10,6 +11,7 @@ public record GarmentFilter(
         GarmentCategory category,
         @Size(max = 80) String subcategory,
         GarmentStatus status,
+        ProcessingStatus processingStatus,
         @Size(max = 60) String season,
         @Size(max = 60) String occasion,
         @Size(max = 60) String colour,

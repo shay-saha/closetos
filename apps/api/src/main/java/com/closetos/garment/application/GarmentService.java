@@ -102,6 +102,7 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         validate(metadata);
         garment.update(metadata, version.asLong(), clock.instant());
         garment.confirmMetadata();
+        media.confirmImages(garment.id(), wardrobe.currentWardrobeId());
         return garments.saveAndFlush(garment).details();
     }
 

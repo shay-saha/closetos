@@ -1,5 +1,7 @@
 package com.closetos.activity.application;
 
+import com.closetos.intelligence.api.AnalysisDocument;
+import com.closetos.intelligence.api.SuggestionAccess;
 import com.closetos.media.api.AssetDescriptor;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.ProcessingAccess;
@@ -8,6 +10,8 @@ import com.closetos.media.api.WorkflowJob;
 import com.closetos.platform.api.DomainException;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -15,6 +19,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class ProcessingResults {
     private static final Set<String> DERIVATIVES =
             Set.of("isolated", "display", "card", "thumbnail", "mask");
+    private static final Logger LOG = LoggerFactory.getLogger(ProcessingResults.class);
+    private final SuggestionAccess suggestions;
     private final ProcessingAccess processing;
     private final ProcessingTransitions transitions;
     private final ObjectStoragePort storage;
@@ -24,7 +30,9 @@ public class ProcessingResults {
             ProcessingAccess processing,
             ProcessingTransitions transitions,
             ObjectStoragePort storage,
-            JsonMapper json) {
+            JsonMapper json,
+            SuggestionAccess suggestions) {
+        this.suggestions = suggestions;
         this.processing = processing;
         this.transitions = transitions;
         this.storage = storage;
@@ -43,7 +51,26 @@ public class ProcessingResults {
         WorkflowJob job = processing.context(result.jobId()).orElse(null);
         if (job == null) return;
         validate(job, result);
-        transitions.completed(result, eventId);
+        AnalysisDocument analysis = null;
+        if (result.analysisKey() != null) {
+            try {
+                if (!result.analysisKey().equals(job.outputPrefix() + "analysis.json")) {
+                    throw DomainException.invalid("Invalid analysis output.");
+                }
+                analysis =
+                        suggestions.validate(
+                                job.imageId(),
+                                job.pipelineVersion(),
+                                storage.readJson(result.analysisKey()));
+            } catch (RuntimeException exception) {
+                LOG.warn(
+                        "Analysis rejected for image {} ({})",
+                        job.imageId(),
+                        exception.getClass().getSimpleName());
+                result = result.withoutAnalysis("INVALID_ANALYSIS_OUTPUT");
+            }
+        }
+        transitions.completed(result, eventId, analysis);
     }
 
     private void validate(WorkflowJob job, ProcessingResult result) {
@@ -58,10 +85,6 @@ public class ProcessingResults {
                 || result.segmentationModel() == null
                 || result.segmentationModel().isBlank()) {
             throw DomainException.invalid("Processing output did not match this photograph.");
-        }
-        if (result.analysisKey() != null
-                && !result.analysisKey().equals(job.outputPrefix() + "analysis.json")) {
-            throw DomainException.invalid("Invalid analysis output.");
         }
         for (Map.Entry<String, AssetDescriptor> entry : result.assets().entrySet()) {
             AssetDescriptor asset = entry.getValue();

@@ -12,4 +12,17 @@ public record ProcessingResult(
         String analysisKey,
         String analysisFailure,
         double foregroundFraction,
-        String segmentationModel) {}
+        String segmentationModel) {
+    public ProcessingResult withoutAnalysis(String failure) {
+        return new ProcessingResult(
+                jobId,
+                imageId,
+                pipelineVersion,
+                sourceChecksumSha256,
+                assets,
+                null,
+                failure,
+                foregroundFraction,
+                segmentationModel);
+    }
+}
