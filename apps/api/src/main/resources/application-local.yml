@@ -8,3 +8,14 @@ closetos:
   auth:
     client-id: closetos-web
     provider: oidc
+  media:
+    storage-mode: local
+    endpoint: http://localhost:9000
+    bucket: closetos
+    local-access-key: ${MINIO_ROOT_USER}
+    local-secret-key: ${MINIO_ROOT_PASSWORD}
+    workflow-mode: local
+    worker-endpoint: http://localhost:8800
+    worker-token: ${MEDIA_WORKER_TOKEN}
+    dispatch-enabled: true
+    local-upload-observer: true

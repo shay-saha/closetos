@@ -2,6 +2,10 @@
 **/node_modules
 **/.next
 **/target
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
 **/.env*
 **/*.md
 **/*.log

@@ -13,6 +13,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  media-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: workers/media-processor/uv.lock
+      - run: uv sync --project workers/media-processor --locked
+      - run: make test-worker
+
   api:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -64,6 +76,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: workers/media-processor/uv.lock
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -77,7 +93,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: python3 scripts/prepare-local-env.py
+      - run: uv sync --project workers/media-processor --locked
       - run: docker compose up -d --wait
+      - run: uv run --project workers/media-processor python scripts/prepare-local-storage.py
+      - name: Start local media worker
+        run: |
+          ./scripts/run-media-worker.sh > /tmp/closetos-worker.log 2>&1 &
+          python3 scripts/wait-for-http.py http://localhost:8800/health
       - run: python3 scripts/wait-for-http.py http://localhost:8081/realms/closetos/.well-known/openid-configuration
       - name: Start local API
         run: |

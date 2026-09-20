@@ -1,4 +1,21 @@
 services:
+  storage:
+    build:
+      context: .
+      dockerfile: infra/local/Minio.Dockerfile
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3000
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - media-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
   identity:
     image: quay.io/keycloak/keycloak:26.7.3
     command: [start-dev, --import-realm]
@@ -27,5 +44,6 @@ services:
       timeout: 5s
       retries: 10
 volumes:
+  media-data:
   identity-data:
   postgres-data:

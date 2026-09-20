@@ -1,12 +1,22 @@
-.PHONY: setup dependencies api web test-api test-web test-e2e format-api
+.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
 	pnpm install --frozen-lockfile
+	uv sync --project workers/media-processor --locked
 
 dependencies:
 	docker compose up -d --wait
 	python3 scripts/wait-for-http.py http://localhost:8081/realms/closetos/.well-known/openid-configuration
+	uv run --project workers/media-processor python scripts/prepare-local-storage.py
+
+media-worker:
+	./scripts/run-media-worker.sh
+
+test-worker:
+	uv run --project workers/media-processor ruff check workers/media-processor
+	uv run --project workers/media-processor ruff format --check workers/media-processor
+	uv run --project workers/media-processor pytest workers/media-processor/tests
 
 api:
 	./scripts/run-api.sh

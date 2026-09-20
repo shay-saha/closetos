@@ -20,6 +20,18 @@ if not environment.exists():
     with os.fdopen(descriptor, "w") as target:
         target.write("".join(f"{key}={value}\n" for key, value in values.items()))
 
+existing = {line.split("=", 1)[0] for line in environment.read_text().splitlines() if "=" in line}
+local_media = {
+    "MINIO_ROOT_USER": "closetos-local",
+    "MINIO_ROOT_PASSWORD": secrets.token_urlsafe(32),
+    "MEDIA_WORKER_TOKEN": secrets.token_urlsafe(48),
+}
+with environment.open("a") as target:
+    for key, value in local_media.items():
+        if key not in existing:
+            target.write(f"{key}={value}\n")
+os.chmod(environment, 0o600)
+
 web_environment = root / "apps/web/.env.local"
 if not web_environment.exists():
     lines = [line for line in environment.read_text().splitlines()
