@@ -15,6 +15,7 @@ export function useGarments(filters: string) {
       return api<GarmentPage>(`garments?${params}`, { signal });
     },
     getNextPageParam: (page) => page.nextCursor,
+    refetchInterval: 10 * 60_000,
   });
 }
 
@@ -22,5 +23,12 @@ export function useGarment(id: string) {
   return useQuery({
     queryKey: ["garment", id],
     queryFn: ({ signal }) => api<Garment>(`garments/${id}`, { signal }),
+    refetchInterval: (query) =>
+      query.state.data &&
+      ["AWAITING_UPLOAD", "UPLOADED", "PROCESSING_MEDIA", "ANALYSING"].includes(
+        query.state.data.processingStatus,
+      )
+        ? 2000
+        : 10 * 60_000,
   });
 }

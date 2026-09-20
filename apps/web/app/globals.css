@@ -262,6 +262,88 @@ small,
   text-transform: uppercase;
   color: var(--muted);
 }
+.piece-art .isolated-photo {
+  position: absolute;
+  width: 88%;
+  height: 86%;
+  inset: 7% 6%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 8px #28292212);
+}
+.piece-art .hanging-photo {
+  inset: 19% 6% 3%;
+  height: 78%;
+  object-position: center top;
+}
+.photo-capture {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: 1px dashed var(--accent);
+  background: var(--surface);
+  border-radius: 4px;
+  margin-bottom: 3rem;
+}
+.photo-capture > p {
+  max-width: 42rem;
+  margin-bottom: 1rem;
+}
+.photo-capture h2,
+.manual-entry-heading {
+  margin-bottom: 1rem;
+}
+.photo-capture .form-actions {
+  flex-wrap: wrap;
+  margin: 1.5rem 0 1rem;
+}
+.upload-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 1.5rem;
+}
+.upload-list li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+.upload-preview {
+  width: 56px;
+  height: 70px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--line);
+}
+.upload-copy {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.upload-copy p {
+  color: var(--muted);
+  margin: 0.3rem 0;
+}
+.upload-copy a {
+  display: inline-block;
+  margin-top: 0.35rem;
+  text-decoration: underline;
+}
+.upload-copy progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.processing-notice {
+  padding: 1rem;
+  margin: 1rem 0;
+  background: var(--surface);
+  border-left: 2px solid var(--accent);
+}
 .piece-card h2 {
   font-family: inherit;
   font-size: 0.95rem;

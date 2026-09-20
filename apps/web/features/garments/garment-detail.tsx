@@ -65,7 +65,7 @@ export function GarmentDetail({ id }: { id: string }) {
         ← Your collection
       </Link>
       <div className="detail-grid">
-        <GarmentArt garment={garment} />
+        <GarmentArt garment={garment} size="display" />
         {editing ? (
           <GarmentForm
             initial={garment}
@@ -78,6 +78,24 @@ export function GarmentDetail({ id }: { id: string }) {
           <div className="detail-copy">
             <p className="eyebrow">{categoryNames[garment.category]}</p>
             <h1>{garment.name}</h1>
+            {garment.processingStatus === "READY_FOR_REVIEW" && (
+              <p className="processing-notice" role="status">
+                Your photograph is ready. Choose “Edit piece” to review and save the details.
+              </p>
+            )}
+            {["AWAITING_UPLOAD", "UPLOADED", "PROCESSING_MEDIA", "ANALYSING"].includes(
+              garment.processingStatus,
+            ) && (
+              <p className="processing-notice" role="status">
+                Your photograph is being prepared. You can add the details while we work.
+              </p>
+            )}
+            {garment.processingStatus === "FAILED" && (
+              <p className="processing-notice" role="status">
+                This photograph could not be processed. Retry from the upload queue, or add the
+                details yourself.
+              </p>
+            )}
             <p className="small">
               {[garment.brand, garment.primaryColourName, garment.material]
                 .filter(Boolean)

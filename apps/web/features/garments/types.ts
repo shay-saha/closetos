@@ -59,6 +59,16 @@ export const metadataSchema = z
   });
 export type GarmentMetadata = z.infer<typeof metadataSchema>;
 export type Garment = GarmentMetadata & {
+  assets?: {
+    imageId: string;
+    isolatedUrl: string;
+    displayUrl: string;
+    cardUrl: string;
+    thumbnailUrl: string;
+    width: number;
+    height: number;
+    expiresAt: string;
+  } | null;
   id: string;
   status: "AVAILABLE" | "LAUNDRY" | "PACKED" | "LENT" | "ARCHIVED";
   processingStatus: string;

@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { GarmentForm } from "./garment-form";
 import { GarmentArt } from "./garment-art";
 import type { Garment, GarmentMetadata } from "./types";
+import { PhotoCapture } from "@/features/capture/photo-capture";
 
 export function AddGarment() {
   const router = useRouter();
@@ -27,6 +28,8 @@ export function AddGarment() {
           <p>Add the details you know. You can always come back to fill in the rest.</p>
         </div>
       </div>
+      <PhotoCapture />
+      <h2 className="manual-entry-heading">Or start with the details.</h2>
       <div className="form-layout">
         <GarmentArt garment={{ category: "TOP" }} />
         <GarmentForm submit={create.mutate} pending={create.isPending} error={create.error} />

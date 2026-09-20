@@ -25,3 +25,27 @@ it("submits user-entered canonical metadata", async () => {
     expect.anything(),
   );
 });
+
+it("keeps an unknown purchase price empty when reviewing a photo draft", async () => {
+  const user = userEvent.setup();
+  const submit = vi.fn();
+  render(
+    <GarmentForm
+      initial={{
+        name: "New piece",
+        category: "OTHER",
+        purchasePrice: null,
+        purchaseCurrency: null,
+      }}
+      submit={submit}
+      pending={false}
+    />,
+  );
+  await user.clear(screen.getByRole("textbox", { name: "Piece name *" }));
+  await user.type(screen.getByRole("textbox", { name: "Piece name *" }), "Olive shirt");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(submit).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "Olive shirt", purchasePrice: null }),
+    expect.anything(),
+  );
+});

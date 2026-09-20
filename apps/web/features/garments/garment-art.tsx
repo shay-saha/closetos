@@ -1,4 +1,4 @@
-import type { Category, GarmentMetadata } from "./types";
+import type { Category, Garment, GarmentMetadata } from "./types";
 
 const shapes: Record<Category, string> = {
   TOP: "M38 42 65 30 85 44 105 30 132 42 157 83 130 99 118 76 120 178 50 178 52 76 40 99 13 83Z",
@@ -16,9 +16,12 @@ const shapes: Record<Category, string> = {
 export function GarmentArt({
   garment,
   hanger = false,
+  size = "card",
 }: {
-  garment: Pick<GarmentMetadata, "category" | "primaryColourHex">;
+  garment: Pick<GarmentMetadata, "category" | "primaryColourHex"> &
+    Partial<Pick<Garment, "assets" | "processingStatus">>;
   hanger?: boolean;
+  size?: "card" | "display";
 }) {
   const hanging = ["TOP", "DRESS", "OUTERWEAR", "BOTTOM"].includes(garment.category);
   return (
@@ -34,15 +37,37 @@ export function GarmentArt({
             {garment.category === "BOTTOM" && <path d="M49 40V54M120 40V54" strokeWidth="4" />}
           </g>
         )}
-        <path
-          d={shapes[garment.category]}
-          fill={garment.primaryColourHex ?? "#a5a48f"}
-          stroke="var(--ink)"
-          strokeOpacity=".1"
-          fillRule="evenodd"
-        />
+        {!garment.assets && (
+          <path
+            d={shapes[garment.category]}
+            fill={garment.primaryColourHex ?? "#a5a48f"}
+            stroke="var(--ink)"
+            strokeOpacity=".1"
+            fillRule="evenodd"
+          />
+        )}
       </svg>
-      <span className="manual-label">Photo not added</span>
+      {garment.assets ? (
+        // Private signed URLs expire and are fetched directly by the browser.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className={`isolated-photo${hanger && hanging ? " hanging-photo" : ""}`}
+          src={size === "display" ? garment.assets.displayUrl : garment.assets.cardUrl}
+          alt=""
+          loading={size === "display" ? "eager" : "lazy"}
+          decoding="async"
+          width={garment.assets.width}
+          height={garment.assets.height}
+        />
+      ) : (
+        <span className="manual-label">
+          {garment.processingStatus && !["READY", "DRAFT"].includes(garment.processingStatus)
+            ? garment.processingStatus === "FAILED"
+              ? "Photo needs attention"
+              : "Photo in progress"
+            : "Photo not added"}
+        </span>
+      )}
     </div>
   );
 }

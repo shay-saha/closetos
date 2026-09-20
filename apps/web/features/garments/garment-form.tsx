@@ -24,7 +24,9 @@ export function GarmentForm({
     formState: { errors },
   } = useForm<GarmentMetadata>({
     resolver: zodResolver(metadataSchema),
-    defaultValues: initial ?? { name: "", category: "TOP", purchaseCurrency: "GBP" },
+    defaultValues: initial
+      ? { ...initial, purchaseCurrency: initial.purchaseCurrency ?? "GBP" }
+      : { name: "", category: "TOP", purchaseCurrency: "GBP" },
   });
   return (
     <form className="garment-form" onSubmit={handleSubmit(submit)}>
@@ -101,7 +103,7 @@ export function GarmentForm({
             min="0"
             step="0.01"
             {...register("purchasePrice", {
-              setValueAs: (value) => (value === "" ? null : Number(value)),
+              setValueAs: (value) => (value == null || value === "" ? null : Number(value)),
             })}
             aria-invalid={!!errors.purchasePrice}
           />
