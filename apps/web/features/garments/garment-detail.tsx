@@ -12,12 +12,16 @@ import { useGarment } from "./queries";
 import { GarmentArt } from "./garment-art";
 import { GarmentForm } from "./garment-form";
 import { categoryNames, type Garment, type GarmentMetadata } from "./types";
+import { GarmentReview } from "@/features/review/garment-review";
+import { useSuggestions } from "@/features/review/suggestions";
 
 export function GarmentDetail({ id }: { id: string }) {
   const query = useGarment(id);
   const client = useQueryClient();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const suggestions = useSuggestions(id);
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["garments"] }),
@@ -66,7 +70,13 @@ export function GarmentDetail({ id }: { id: string }) {
       </Link>
       <div className="detail-grid">
         <GarmentArt garment={garment} size="display" />
-        {editing ? (
+        {reviewing ? (
+          <GarmentReview
+            garment={garment}
+            completed={() => setReviewing(false)}
+            cancel={() => setReviewing(false)}
+          />
+        ) : editing ? (
           <GarmentForm
             initial={garment}
             submit={save.mutate}
@@ -80,7 +90,7 @@ export function GarmentDetail({ id }: { id: string }) {
             <h1>{garment.name}</h1>
             {garment.processingStatus === "READY_FOR_REVIEW" && (
               <p className="processing-notice" role="status">
-                Your photograph is ready. Choose “Edit piece” to review and save the details.
+                Your photograph is ready. Review the details to complete your piece.
               </p>
             )}
             {["AWAITING_UPLOAD", "UPLOADED", "PROCESSING_MEDIA", "ANALYSING"].includes(
@@ -158,6 +168,10 @@ export function GarmentDetail({ id }: { id: string }) {
             </label>
             {availability.error && <p role="alert">{availability.error.message}</p>}
             <div className="form-actions">
+              {(garment.processingStatus === "READY_FOR_REVIEW" ||
+                suggestions.data?.some((item) => item.status === "PENDING")) && (
+                <Button onClick={() => setReviewing(true)}>Review details</Button>
+              )}
               <Button onClick={() => setEditing(true)}>Edit piece</Button>
               <Dialog.Root>
                 <Dialog.Trigger className="button button-danger">Delete piece</Dialog.Trigger>

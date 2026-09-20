@@ -1,4 +1,4 @@
-export type UploadState = "queued" | "uploading" | "processing" | "ready" | "failed";
+export type UploadState = "queued" | "uploading" | "processing" | "ready" | "reviewed" | "failed";
 export type QueuedUpload = {
   key: string;
   wardrobeId: string;

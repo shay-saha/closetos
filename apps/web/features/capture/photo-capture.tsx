@@ -104,6 +104,11 @@ export function PhotoCapture() {
         queue resumes after a refresh.
       </p>
       {error && <p role="alert">{error}</p>}
+      {items.some((item) => item.state === "ready") && (
+        <Link href="/review" className="button button-secondary">
+          Review completed photographs →
+        </Link>
+      )}
       {!!items.length && (
         <ul className="upload-list" aria-label="Upload queue">
           {items.map((upload) => (
@@ -118,9 +123,11 @@ export function PhotoCapture() {
                       ? "Removing the background…"
                       : upload.state === "ready"
                         ? "Ready to review"
-                        : upload.state === "queued"
-                          ? "Waiting to upload"
-                          : upload.error}
+                        : upload.state === "reviewed"
+                          ? "Ready in your wardrobe"
+                          : upload.state === "queued"
+                            ? "Waiting to upload"
+                            : upload.error}
                 </p>
                 {upload.state === "uploading" && (
                   <progress
@@ -141,7 +148,7 @@ export function PhotoCapture() {
                     Retry
                   </Button>
                 )}
-                {["ready", "failed", "queued"].includes(upload.state) && (
+                {["ready", "reviewed", "failed", "queued"].includes(upload.state) && (
                   <Button variant="quiet" onClick={() => void engine?.dismiss(upload.id)}>
                     Dismiss
                   </Button>

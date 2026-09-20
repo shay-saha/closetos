@@ -4,7 +4,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Garment, GarmentPage } from "./types";
 
-export function useGarments(filters: string) {
+export function useGarments(filters: string, refetchInterval = 10 * 60_000) {
   return useInfiniteQuery({
     queryKey: ["garments", filters],
     initialPageParam: null as string | null,
@@ -15,7 +15,7 @@ export function useGarments(filters: string) {
       return api<GarmentPage>(`garments?${params}`, { signal });
     },
     getNextPageParam: (page) => page.nextCursor,
-    refetchInterval: 10 * 60_000,
+    refetchInterval,
   });
 }
 

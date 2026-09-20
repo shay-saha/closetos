@@ -344,6 +344,64 @@ small,
   background: var(--surface);
   border-left: 2px solid var(--accent);
 }
+.suggestion-list {
+  margin: 1.5rem 0;
+  border-block: 1px solid var(--line);
+}
+.suggestion-list > div {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.suggestion-list > div:last-child {
+  border: 0;
+}
+.suggestion-list dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.suggestion-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.suggestion-list dd span {
+  display: block;
+  font-size: 0.75rem;
+}
+.confidence-low {
+  color: var(--accent);
+  font-weight: 600;
+}
+section[aria-label="Review garment details"] .garment-form {
+  margin-top: 2rem;
+}
+.settings-form {
+  max-width: 620px;
+}
+.privacy-preference {
+  border: 1px solid var(--line);
+  padding: 1.25rem;
+}
+.privacy-preference legend {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+}
+.garment-form .checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+.checkbox-field input {
+  min-height: 24px;
+  width: 24px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.privacy-preference p {
+  margin: 0.75rem 0 0;
+}
 .piece-card h2 {
   font-family: inherit;
   font-size: 0.95rem;

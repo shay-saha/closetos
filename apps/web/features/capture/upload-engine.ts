@@ -159,6 +159,12 @@ export class UploadEngine {
     this.emit();
   }
 
+  async reviewed(garmentId: string) {
+    for (const item of this.items.filter((upload) => upload.garmentId === garmentId)) {
+      await this.update(item.id, { state: "reviewed" });
+    }
+  }
+
   private async update(id: string, patch: Partial<QueuedUpload>) {
     const item = this.items.find((upload) => upload.id === id);
     if (!item) return;
@@ -217,7 +223,11 @@ export class UploadEngine {
       while (!signal.aborted) {
         const progress = await api<Processing>(`processing/${item.imageId}`, { signal });
         if (["READY", "READY_FOR_REVIEW"].includes(progress.state)) {
-          await this.update(item.id, { state: "ready", file: undefined, error: undefined });
+          await this.update(item.id, {
+            state: progress.state === "READY" ? "reviewed" : "ready",
+            file: undefined,
+            error: undefined,
+          });
           this.changed();
           return;
         }
