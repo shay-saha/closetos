@@ -25,11 +25,12 @@ public record GarmentFilter(
         LocalDate notWornSince,
         LocalDate purchasedAfter,
         LocalDate purchasedBefore,
+        GarmentView view,
         GarmentSort sort,
         @Size(max = 2048) String cursor,
         @Min(1) @Max(100) Integer limit) {
     public GarmentFilter {
-        sort = sort == null ? GarmentSort.NEWEST : sort;
+        sort = sort == null ? (view == null ? GarmentSort.NEWEST : view.defaultSort()) : sort;
         limit = limit == null ? 40 : limit;
     }
 }

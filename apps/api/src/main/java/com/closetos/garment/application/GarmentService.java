@@ -4,10 +4,12 @@ import com.closetos.garment.api.GarmentDetails;
 import com.closetos.garment.api.GarmentFilter;
 import com.closetos.garment.api.GarmentMetadata;
 import com.closetos.garment.api.GarmentPage;
+import com.closetos.garment.api.GarmentSelection;
 import com.closetos.garment.api.GarmentStatus;
 import com.closetos.garment.domain.Garment;
 import com.closetos.garment.infrastructure.CatalogueQuery;
 import com.closetos.garment.infrastructure.GarmentRepository;
+import com.closetos.garment.infrastructure.SmartQueryCompiler;
 import com.closetos.platform.api.DomainException;
 import com.closetos.wardrobe.api.WardrobeAccess;
 import jakarta.validation.Validator;
@@ -36,6 +38,7 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
     private final JsonMapper json;
     private final Validator validator;
     private final CatalogueQuery catalogue;
+    private final SmartQueryCompiler smartQueries;
     private final com.closetos.media.api.MediaAccess media;
 
     public GarmentService(
@@ -45,6 +48,7 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
             JsonMapper json,
             Validator validator,
             CatalogueQuery catalogue,
+            SmartQueryCompiler smartQueries,
             com.closetos.media.api.MediaAccess media) {
         this.garments = garments;
         this.wardrobe = wardrobe;
@@ -52,6 +56,7 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         this.json = json;
         this.validator = validator;
         this.catalogue = catalogue;
+        this.smartQueries = smartQueries;
         this.media = media;
     }
 
@@ -93,6 +98,17 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
     @Transactional
     public GarmentPage list(GarmentFilter filter) {
         return catalogue.find(wardrobe.currentWardrobeId(), filter);
+    }
+
+    @Override
+    public void validateSmartQuery(ObjectNode query) {
+        smartQueries.compile(query);
+    }
+
+    @Override
+    @Transactional
+    public GarmentPage select(GarmentFilter filter, GarmentSelection selection) {
+        return catalogue.find(wardrobe.currentWardrobeId(), filter, selection);
     }
 
     @Transactional

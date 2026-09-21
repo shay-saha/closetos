@@ -7,6 +7,10 @@ import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
 
 public interface GarmentAccess {
+    void validateSmartQuery(ObjectNode query);
+
+    GarmentPage select(GarmentFilter filter, GarmentSelection selection);
+
     void lockOwned(List<UUID> garments);
 
     List<UUID> ownedIds();

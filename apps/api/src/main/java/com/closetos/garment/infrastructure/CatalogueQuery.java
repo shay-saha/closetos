@@ -3,6 +3,7 @@ package com.closetos.garment.infrastructure;
 import com.closetos.garment.api.GarmentDetails;
 import com.closetos.garment.api.GarmentFilter;
 import com.closetos.garment.api.GarmentPage;
+import com.closetos.garment.api.GarmentSelection;
 import com.closetos.garment.domain.Garment;
 import com.closetos.platform.api.DomainException;
 import jakarta.persistence.EntityManager;
@@ -17,16 +18,47 @@ import org.springframework.stereotype.Repository;
 public class CatalogueQuery {
     private final EntityManager entityManager;
     private final CatalogueCursor cursors;
+    private final SmartQueryCompiler smartQueries;
+    private final SmartViews views;
 
-    CatalogueQuery(EntityManager entityManager, CatalogueCursor cursors) {
+    CatalogueQuery(
+            EntityManager entityManager,
+            CatalogueCursor cursors,
+            SmartQueryCompiler smartQueries,
+            SmartViews views) {
         this.entityManager = entityManager;
         this.cursors = cursors;
+        this.smartQueries = smartQueries;
+        this.views = views;
     }
 
     public GarmentPage find(UUID wardrobe, GarmentFilter filter) {
+        return find(wardrobe, filter, null);
+    }
+
+    public GarmentPage find(UUID wardrobe, GarmentFilter filter, GarmentSelection selection) {
         List<String> conditions = new ArrayList<>(List.of("wardrobe_id = :wardrobe"));
         Map<String, Object> parameters = new LinkedHashMap<>(Map.of("wardrobe", wardrobe));
-        if (filter.status() == null) {
+        String scope = wardrobe.toString();
+        boolean hasStatus = false;
+        if (selection != null) {
+            scope += ":" + selection.scope();
+            if (selection.garmentIds() != null) {
+                conditions.add(selection.garmentIds().isEmpty() ? "FALSE" : "id IN (:selectedIds)");
+                if (!selection.garmentIds().isEmpty())
+                    parameters.put("selectedIds", selection.garmentIds());
+                scope += ":" + selection.garmentIds();
+            }
+        }
+        var rules = views.combine(selection == null ? null : selection.query(), filter.view());
+        if (rules != null) {
+            var compiled = smartQueries.compileForCatalogue(rules);
+            conditions.add(compiled.condition());
+            parameters.putAll(compiled.parameters());
+            hasStatus = compiled.hasStatus();
+            scope += ":" + compiled.evaluatedOn() + ":" + rules;
+        }
+        if (filter.status() == null && !hasStatus) {
             conditions.add("status <> 'ARCHIVED'");
         }
         match(
@@ -120,7 +152,7 @@ public class CatalogueQuery {
         }
         CatalogueSort sort = CatalogueSort.of(filter.sort());
         if (filter.cursor() != null) {
-            CatalogueCursor.Position position = cursors.decode(filter.cursor(), filter);
+            CatalogueCursor.Position position = cursors.decode(filter.cursor(), filter, scope);
             Object value;
             try {
                 value = sort.parse(position.value());
@@ -157,7 +189,8 @@ public class CatalogueQuery {
         String next =
                 found.size() <= filter.limit()
                         ? null
-                        : cursors.encode(items.getLast().id(), sort.value(items.getLast()), filter);
+                        : cursors.encode(
+                                items.getLast().id(), sort.value(items.getLast()), filter, scope);
         return new GarmentPage(items, next);
     }
 

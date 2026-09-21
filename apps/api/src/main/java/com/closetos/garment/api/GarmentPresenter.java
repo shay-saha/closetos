@@ -21,7 +21,7 @@ public class GarmentPresenter {
                         .get(garment.id()));
     }
 
-    GarmentPage page(GarmentPage page) {
+    public GarmentPage page(GarmentPage page) {
         var assets =
                 media.assetsFor(
                         page.items().stream().map(GarmentDetails::id).toList(),

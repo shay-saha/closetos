@@ -22,20 +22,21 @@ class CatalogueCursor {
 
     record Position(UUID id, String value, String query) {}
 
-    String encode(UUID id, String value, GarmentFilter filter) {
+    String encode(UUID id, String value, GarmentFilter filter, String scope) {
         return Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(
-                        json.writeValueAsBytes(new Position(id, value, fingerprint(filter))));
+                        json.writeValueAsBytes(
+                                new Position(id, value, fingerprint(filter, scope))));
     }
 
-    Position decode(String cursor, GarmentFilter filter) {
+    Position decode(String cursor, GarmentFilter filter, String scope) {
         try {
             Position position =
                     json.readValue(Base64.getUrlDecoder().decode(cursor), Position.class);
             if (position.id() == null
                     || position.value() == null
-                    || !fingerprint(filter).equals(position.query())) {
+                    || !fingerprint(filter, scope).equals(position.query())) {
                 throw DomainException.invalid("This pagination cursor does not match the filters.");
             }
             return position;
@@ -44,11 +45,12 @@ class CatalogueCursor {
         }
     }
 
-    private String fingerprint(GarmentFilter filter) {
+    private String fingerprint(GarmentFilter filter, String scope) {
         try {
             ObjectNode query = json.valueToTree(filter);
             query.remove("cursor");
             query.remove("limit");
+            query.put("scope", scope);
             return HexFormat.of()
                     .formatHex(
                             MessageDigest.getInstance("SHA-256")
