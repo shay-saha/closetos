@@ -84,6 +84,14 @@ public class Garment {
         processingStatus = ProcessingStatus.READY;
     }
 
+    public void updateWearStatistics(int count, LocalDate lastWorn, Instant now) {
+        if (count < 0 || (count == 0) != (lastWorn == null))
+            throw new IllegalArgumentException("Wear statistics are inconsistent.");
+        wearCountCached = count;
+        lastWornAt = lastWorn;
+        updatedAt = now;
+    }
+
     public UUID id() {
         return id;
     }

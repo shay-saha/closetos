@@ -12,7 +12,9 @@ import com.closetos.platform.api.DomainException;
 import com.closetos.wardrobe.api.WardrobeAccess;
 import jakarta.validation.Validator;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -59,6 +61,28 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         return garments.saveAndFlush(
                         new Garment(wardrobe.currentWardrobeId(), metadata, clock.instant()))
                 .details();
+    }
+
+    @Override
+    @Transactional
+    public void lockOwned(List<UUID> ids) {
+        if (ids.isEmpty()) return;
+        var locked = garments.lockOwned(wardrobe.currentWardrobeId(), ids);
+        if (locked.size() != ids.size()) throw DomainException.notFound("Garment");
+    }
+
+    @Override
+    @Transactional
+    public List<UUID> ownedIds() {
+        return garments.ownedIds(wardrobe.currentWardrobeId());
+    }
+
+    @Override
+    @Transactional
+    public void updateWearStatistics(UUID id, int count, LocalDate lastWorn) {
+        var garment = ownedEntity(id);
+        garment.updateWearStatistics(count, lastWorn, clock.instant());
+        garments.saveAndFlush(garment);
     }
 
     @Transactional
