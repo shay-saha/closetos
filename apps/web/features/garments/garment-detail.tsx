@@ -14,6 +14,7 @@ import { GarmentForm } from "./garment-form";
 import { categoryNames, type Garment, type GarmentMetadata } from "./types";
 import { GarmentReview } from "@/features/review/garment-review";
 import { useSuggestions } from "@/features/review/suggestions";
+import { WearHistory, WearLog } from "@/features/wear/wear";
 
 export function GarmentDetail({ id }: { id: string }) {
   const query = useGarment(id);
@@ -173,6 +174,11 @@ export function GarmentDetail({ id }: { id: string }) {
                 <Button onClick={() => setReviewing(true)}>Review details</Button>
               )}
               <Button onClick={() => setEditing(true)}>Edit piece</Button>
+              {garment.processingStatus === "READY" && (
+                <Link className="button button-secondary" href={`/studio?garment=${id}`}>
+                  Add to outfit
+                </Link>
+              )}
               <Dialog.Root>
                 <Dialog.Trigger className="button button-danger">Delete piece</Dialog.Trigger>
                 <Dialog.Portal>
@@ -201,6 +207,8 @@ export function GarmentDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+      {garment.processingStatus === "READY" && <WearLog target={{ garmentId: id }} />}
+      <WearHistory garmentId={id} />
     </div>
   );
 }

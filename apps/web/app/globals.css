@@ -493,6 +493,137 @@ textarea:focus {
 .detail-copy {
   align-self: center;
 }
+.studio-workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 3rem;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.studio-drawer {
+  align-self: start;
+  position: sticky;
+  top: 1rem;
+}
+.drawer-pieces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-height: 520px;
+  overflow-y: auto;
+  margin: 1.25rem 0;
+  padding: 0.25rem;
+}
+.drawer-piece {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: grab;
+}
+.drawer-piece span {
+  display: block;
+  margin-top: 0.4rem;
+}
+.drawer-piece .manual-label {
+  display: none;
+}
+.studio-stage {
+  min-width: 0;
+}
+.outfit-canvas {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  aspect-ratio: 3/4;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.canvas-piece {
+  position: absolute;
+  width: 34%;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: grab;
+  touch-action: none;
+  transform-origin: center;
+}
+.canvas-piece[aria-pressed="true"] {
+  border: 1px dashed var(--accent);
+}
+.canvas-piece .piece-art {
+  background: transparent;
+  overflow: visible;
+}
+.canvas-piece .piece-art .manual-label {
+  display: none;
+}
+.canvas-empty {
+  position: absolute;
+  inset: 40% 1rem auto;
+  text-align: center;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 1.5rem;
+}
+.canvas-controls {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  margin: 1.5rem 0;
+}
+.outfit-metadata {
+  margin-top: 3rem;
+}
+.outfit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+.outfit-card h2 {
+  font-family: inherit;
+  font-size: 1rem;
+  margin: 0;
+}
+.outfit-card .outfit-canvas {
+  margin-bottom: 0.75rem;
+}
+.wear-form {
+  max-width: 700px;
+  margin: 3rem 0;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+.wear-history {
+  margin-top: 3rem;
+}
+.wear-history ul {
+  list-style: none;
+  padding: 0;
+}
+.wear-history li {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding: 1rem 0;
+}
+.wear-history li p {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+}
+.wear-history li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .detail-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -726,7 +857,27 @@ textarea:focus {
   .app-header nav {
     order: 3;
     flex-basis: 100%;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .app-header nav a {
+    gap: 0.3rem;
+    font-size: 0.8rem;
+  }
+  .studio-workspace {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .studio-drawer {
+    position: static;
+  }
+  .drawer-pieces {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: 300px;
+  }
+  .outfit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
   }
   .header-actions .button {
     padding: 0.65rem 0.8rem;
