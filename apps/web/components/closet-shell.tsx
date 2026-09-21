@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Shirt, LayoutGrid, Plus, LogOut } from "lucide-react";
+import { Shirt, LayoutGrid, Plus, LogOut, ListChecks, Settings } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "./ui/button";
 
 const destinations = [
   { href: "/wardrobe", label: "Wardrobe", Icon: Shirt },
   { href: "/catalogue", label: "Catalogue", Icon: LayoutGrid },
+  { href: "/review", label: "Review", Icon: ListChecks },
 ];
 
 export function ClosetShell({ children }: { children: React.ReactNode }) {
@@ -31,6 +32,14 @@ export function ClosetShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="header-actions">
+          <Link
+            href="/settings"
+            className="button button-quiet"
+            aria-label="Settings"
+            aria-current={path === "/settings" ? "page" : undefined}
+          >
+            <Settings size={18} />
+          </Link>
           <Link href="/add" className="button button-primary">
             <Plus size={18} />
             <span>Add a piece</span>
