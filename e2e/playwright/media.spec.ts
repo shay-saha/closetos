@@ -46,6 +46,19 @@ test("capture queue survives an interrupted upload and refresh, then opens metad
     page.getByRole("heading", { name: "Olive cotton shirt", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Your photograph is ready.", { exact: false })).not.toBeVisible();
+  const garmentId = new URL(page.url()).pathname.split("/").at(-1);
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(`/api/backend/garments/${garmentId}/embedding`);
+        expect(response.status()).toBe(200);
+        const embedding = await response.json();
+        expect(embedding.state, embedding.failureCode).not.toBe("FAILED");
+        return embedding.state;
+      },
+      { timeout: 60_000, intervals: [500, 1000] },
+    )
+    .toBe("READY");
   await page.goto("/catalogue");
   await expect(
     page.getByRole("heading", { name: "Olive cotton shirt", exact: true }),
@@ -110,6 +123,8 @@ test("signed direct upload, real isolation, private retrieval, and media cleanup
   expect(garment.name).toBe("New piece");
   expect(garment.category).toBe("OTHER");
   expect(garment.assets.imageId).toBe(reserved.imageId);
+  const embedding = await page.request.get(`/api/backend/garments/${garment.id}/embedding`);
+  expect((await embedding.json()).state).toBe("WAITING_FOR_REVIEW");
   const image = await page.evaluate(async (url) => {
     const response = await fetch(url);
     const bitmap = await createImageBitmap(await response.blob());
