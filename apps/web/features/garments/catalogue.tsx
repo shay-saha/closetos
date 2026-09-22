@@ -43,6 +43,10 @@ export function Catalogue({
   const basePath = collectionId ? `/collections/${collectionId}` : "/catalogue";
   const query = useGarments(params.toString(), 5 * 60_000, collectionId);
   const items = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const advancedFilterValues = JSON.stringify([
+    ...advancedFilters.map(([key]) => params.get(key) ?? ""),
+    params.get("processingStatus") ?? "",
+  ]);
   function update(key: string, value: string) {
     const next = new URLSearchParams(params);
     next.delete("cursor");
@@ -144,7 +148,7 @@ export function Catalogue({
       </div>
       <details className="advanced-filters">
         <summary>More filters</summary>
-        <form action={basePath} key={params.toString()}>
+        <form action={basePath} key={advancedFilterValues}>
           <div className="advanced-filter-grid">
             {advancedFilters.map(([key, label, type]) => (
               <label key={key}>
