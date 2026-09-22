@@ -30,7 +30,20 @@ public record GarmentFilter(
         @Size(max = 2048) String cursor,
         @Min(1) @Max(100) Integer limit) {
     public GarmentFilter {
+        subcategory = clean(subcategory);
+        season = clean(season);
+        occasion = clean(occasion);
+        colour = clean(colour);
+        brand = clean(brand);
+        size = clean(size);
+        formality = clean(formality);
+        tag = clean(tag);
+        q = clean(q);
         sort = sort == null ? (view == null ? GarmentSort.NEWEST : view.defaultSort()) : sort;
         limit = limit == null ? 40 : limit;
+    }
+
+    private static String clean(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 }

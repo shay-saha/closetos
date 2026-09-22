@@ -187,6 +187,42 @@ class CollectionHttpTest extends PostgresIntegrationTest {
                         path(created(owner, smart("No size", ruleWithoutValue("size", "IS_NULL"))))
                                 + "/garments?q=linen"),
                 top);
+        assertIds(
+                read(
+                        owner,
+                        path(
+                                        created(
+                                                owner,
+                                                smart(
+                                                        "Exclude unknown brand",
+                                                        json.createObjectNode()
+                                                                .set(
+                                                                        "not",
+                                                                        rule(
+                                                                                "brand", "EQ",
+                                                                                "Nike")))))
+                                + "/garments"),
+                top,
+                shoes,
+                tagged);
+        assertIds(
+                read(
+                        owner,
+                        path(
+                                        created(
+                                                owner,
+                                                smart(
+                                                        "Other brands",
+                                                        rule("brand", "NE", "Considered"))))
+                                + "/garments"),
+                shoes,
+                tagged);
+        var notIn = ruleWithoutValue("brand", "NOT_IN");
+        notIn.set("value", json.createArrayNode().add("Considered"));
+        assertIds(
+                read(owner, path(created(owner, smart("No selected brands", notIn))) + "/garments"),
+                shoes,
+                tagged);
     }
 
     @Test
@@ -414,6 +450,11 @@ class CollectionHttpTest extends PostgresIntegrationTest {
         assertIds(read(owner, path(collection) + "/garments?view=WORK"), worn);
         assertIds(read(owner, path(collection) + "/garments?view=ARCHIVED"));
         assertIds(read(owner, "/api/v1/garments?view=WORK&category=DRESS"));
+        assertIds(
+                read(
+                        owner,
+                        "/api/v1/garments?view=WORK&subcategory=&season=&occasion=&colour=&brand=&size=&formality=&tag=&q="),
+                worn);
         assertIds(read(owner, "/api/v1/garments?view=PACKED"));
         jdbc.sql("UPDATE garment SET status = 'PACKED' WHERE id = :id")
                 .param("id", UUID.fromString(unworn))

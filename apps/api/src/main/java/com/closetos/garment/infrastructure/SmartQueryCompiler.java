@@ -90,7 +90,7 @@ public class SmartQueryCompiler {
         }
         if (node.has("not")) {
             if (node.size() != 1) throw invalid();
-            return "(NOT " + node(node.get("not"), state, depth + 1) + ")";
+            return "(NOT coalesce(" + node(node.get("not"), state, depth + 1) + ", FALSE))";
         }
         if (!Set.of("field", "operator", "value").containsAll(node.propertyNames())
                 || !node.path("field").isString()
@@ -130,11 +130,9 @@ public class SmartQueryCompiler {
                 throw invalid();
             List<String> parameters = new ArrayList<>();
             for (var item : value) parameters.add(bind(state, value(field, item)));
-            return "("
-                    + normalized(field)
-                    + (operator.equals("IN") ? " IN (" : " NOT IN (")
-                    + String.join(", ", parameters)
-                    + "))";
+            String positive =
+                    "(" + normalized(field) + " IN (" + String.join(", ", parameters) + "))";
+            return operator.equals("IN") ? positive : "(NOT coalesce(" + positive + ", FALSE))";
         }
         Object typed = value(field, value);
         String parameter = bind(state, typed);
@@ -162,7 +160,7 @@ public class SmartQueryCompiler {
         String comparison =
                 switch (operator) {
                     case "EQ" -> "=";
-                    case "NE" -> "<>";
+                    case "NE" -> "IS DISTINCT FROM";
                     case "GT" -> ">";
                     case "GTE" -> ">=";
                     case "LT" -> "<";
