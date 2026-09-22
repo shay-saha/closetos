@@ -6,6 +6,7 @@ COPY workers/media-processor/src ./src
 RUN uv sync --locked --no-dev
 ENV U2NET_HOME=/models OMP_NUM_THREADS=2
 RUN uv run --no-sync python -m closetos_media download-model
+RUN uv run --no-sync python -m closetos_media download-embeddings
 
 FROM python:3.12-slim-bookworm
 RUN useradd --system --uid 10001 --create-home worker

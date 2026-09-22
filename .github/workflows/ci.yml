@@ -98,6 +98,7 @@ jobs:
       - run: uv run --project workers/media-processor python scripts/prepare-local-storage.py
       - name: Start local media worker
         run: |
+          uv run --project workers/media-processor python -m closetos_media download-embeddings
           ./scripts/run-media-worker.sh > /tmp/closetos-worker.log 2>&1 &
           python3 scripts/wait-for-http.py http://localhost:8800/health
       - run: python3 scripts/wait-for-http.py http://localhost:8081/realms/closetos/.well-known/openid-configuration
