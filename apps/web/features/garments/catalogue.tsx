@@ -8,33 +8,66 @@ import { ErrorState, LoadingState } from "@/components/ui/feedback";
 import { useGarments } from "./queries";
 import { categories, categoryNames } from "./types";
 import { GarmentArt } from "./garment-art";
+import { smartViews } from "@/features/collections/types";
 
-export function Catalogue() {
+const advancedFilters = [
+  ["subcategory", "Subcategory", "text"],
+  ["colour", "Colour", "text"],
+  ["brand", "Brand", "text"],
+  ["size", "Size", "text"],
+  ["formality", "Formality", "text"],
+  ["season", "Season tag", "text"],
+  ["occasion", "Occasion tag", "text"],
+  ["tag", "Style tag", "text"],
+  ["minWearCount", "Minimum wears", "number"],
+  ["maxWearCount", "Maximum wears", "number"],
+  ["notWornSince", "Not worn since, including never worn", "date"],
+  ["purchasedAfter", "Purchased on or after", "date"],
+  ["purchasedBefore", "Purchased on or before", "date"],
+] as const;
+const viewSorts: Record<string, string> = {
+  RECENTLY_WORN: "RECENTLY_WORN",
+  MOST_WORN: "MOST_WORN",
+  LEAST_WORN: "LEAST_WORN",
+  FORGOTTEN: "OLDEST",
+  BEST_COST_PER_WEAR: "COST_PER_WEAR",
+  HIGHEST_COST_PER_WEAR: "HIGH_COST_PER_WEAR",
+};
+
+export function Catalogue({
+  collectionId,
+  collectionName,
+}: { collectionId?: string; collectionName?: string } = {}) {
   const params = useSearchParams();
   const router = useRouter();
-  const query = useGarments(params.toString());
+  const basePath = collectionId ? `/collections/${collectionId}` : "/catalogue";
+  const query = useGarments(params.toString(), 5 * 60_000, collectionId);
   const items = query.data?.pages.flatMap((page) => page.items) ?? [];
   function update(key: string, value: string) {
     const next = new URLSearchParams(params);
     next.delete("cursor");
+    if (key === "view") next.delete("sort");
     if (value) next.set(key, value);
     else next.delete(key);
-    router.replace(`/catalogue?${next}`, { scroll: false });
+    router.replace(`${basePath}?${next}`, { scroll: false });
   }
   return (
     <div className="page">
       <div className="page-intro">
         <div>
           <p className="eyebrow">Every piece, in one place</p>
-          <h1>Your collection.</h1>
+          {collectionId ? <h2>Pieces in {collectionName}.</h2> : <h1>Your collection.</h1>}
           <p>A clearer view of what you own. Find a favourite, or see something with fresh eyes.</p>
         </div>
-        <Link className="button button-secondary" href="/wardrobe">
-          Browse the rail
+        <Link
+          className="button button-secondary"
+          href={collectionId ? "/catalogue" : "/collections"}
+        >
+          {collectionId ? "Full catalogue" : "Saved collections"}
         </Link>
       </div>
       <div className="filters">
-        <form className="search" action="/catalogue">
+        <form className="search" action={basePath}>
           <label>
             Find a piece
             <input
@@ -50,6 +83,20 @@ export function Catalogue() {
               <input key={key} name={key} value={value} type="hidden" />
             ))}
         </form>
+        <label>
+          Smart view
+          <select
+            value={params.get("view") ?? ""}
+            onChange={(event) => update("view", event.target.value)}
+          >
+            <option value="">All pieces</option>
+            {smartViews.map(([value, name]) => (
+              <option key={value} value={value}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Category
           <select
@@ -81,7 +128,7 @@ export function Catalogue() {
         <label>
           Order
           <select
-            value={params.get("sort") ?? "NEWEST"}
+            value={params.get("sort") ?? viewSorts[params.get("view") ?? ""] ?? "NEWEST"}
             onChange={(event) => update("sort", event.target.value)}
           >
             <option value="NEWEST">Newest first</option>
@@ -95,6 +142,66 @@ export function Catalogue() {
           </select>
         </label>
       </div>
+      <details className="advanced-filters">
+        <summary>More filters</summary>
+        <form action={basePath} key={params.toString()}>
+          <div className="advanced-filter-grid">
+            {advancedFilters.map(([key, label, type]) => (
+              <label key={key}>
+                {label}
+                <input
+                  name={key}
+                  type={type}
+                  defaultValue={params.get(key) ?? ""}
+                  min={type === "number" ? 0 : undefined}
+                  step={type === "number" ? 1 : undefined}
+                  maxLength={
+                    key === "brand" ? 120 : key === "subcategory" ? 80 : key === "size" ? 40 : 60
+                  }
+                />
+              </label>
+            ))}
+            <label>
+              Photo processing
+              <select name="processingStatus" defaultValue={params.get("processingStatus") ?? ""}>
+                <option value="">Any stage</option>
+                {[
+                  "DRAFT",
+                  "AWAITING_UPLOAD",
+                  "UPLOADED",
+                  "PROCESSING_MEDIA",
+                  "ANALYSING",
+                  "READY_FOR_REVIEW",
+                  "READY",
+                  "FAILED",
+                ].map((status) => (
+                  <option key={status} value={status}>
+                    {status.toLowerCase().replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {Array.from(params.entries())
+            .filter(
+              ([key]) =>
+                key !== "cursor" &&
+                key !== "processingStatus" &&
+                !advancedFilters.some(([field]) => field === key),
+            )
+            .map(([key, value]) => (
+              <input key={key} type="hidden" name={key} value={value} />
+            ))}
+          <div className="form-actions">
+            <Button type="submit" variant="secondary">
+              Apply filters
+            </Button>
+            <Link href={basePath} className="button button-quiet">
+              Clear filters
+            </Link>
+          </div>
+        </form>
+      </details>
       {query.isPending ? (
         <LoadingState />
       ) : query.isError ? (
@@ -102,13 +209,19 @@ export function Catalogue() {
       ) : items.length === 0 ? (
         <div className="empty-state">
           <Shirt size={48} strokeWidth={1} />
-          <h2>Make room for your first piece.</h2>
+          <h2>
+            {collectionId
+              ? "No matching pieces in this collection."
+              : "Make room for your first piece."}
+          </h2>
           <p>
-            {params.size
-              ? "No pieces match these filters. Try widening your search."
-              : "Start with the piece you reach for most. Your wardrobe will grow from there."}
+            {collectionId
+              ? "Adjust the saved rules or selected pieces above to widen this collection."
+              : params.size
+                ? "No pieces match these filters. Try widening your search."
+                : "Start with the piece you reach for most. Your wardrobe will grow from there."}
           </p>
-          <Link href={params.size ? "/catalogue" : "/add"} className="button button-primary">
+          <Link href={params.size ? basePath : "/add"} className="button button-primary">
             {params.size ? "Clear filters" : "Add your first piece"}
           </Link>
         </div>

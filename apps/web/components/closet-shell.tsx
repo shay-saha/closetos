@@ -26,7 +26,15 @@ export function ClosetShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav aria-label="Main navigation">
           {destinations.map(({ href, label, Icon }) => (
-            <Link key={href} href={href} aria-current={path === href ? "page" : undefined}>
+            <Link
+              key={href}
+              href={href}
+              aria-current={
+                path === href || (href === "/catalogue" && path.startsWith("/collections"))
+                  ? "page"
+                  : undefined
+              }
+            >
               <Icon size={18} />
               {label}
             </Link>
