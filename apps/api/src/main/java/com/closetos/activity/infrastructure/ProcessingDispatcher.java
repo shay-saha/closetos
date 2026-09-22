@@ -9,6 +9,7 @@ import com.closetos.media.api.WorkflowOrchestratorPort;
 import com.closetos.platform.api.DomainException;
 import com.closetos.platform.api.OutboxEntry;
 import com.closetos.platform.api.OutboxQueue;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +49,8 @@ class ProcessingDispatcher {
 
     @Scheduled(fixedDelayString = "${closetos.media.dispatch-ms:1000}")
     void publish() {
-        for (OutboxEntry event : queue.claim()) {
+        for (OutboxEntry event :
+                queue.claim(Set.of("START_PROCESSING", "DELETE_MEDIA", "DELETE_ORIGINAL"))) {
             try {
                 dispatch(event);
                 queue.published(event);

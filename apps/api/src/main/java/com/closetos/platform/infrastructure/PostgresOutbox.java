@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -48,21 +49,45 @@ class PostgresOutbox implements OutboxAccess, OutboxQueue {
     @Override
     @Transactional
     public List<OutboxEntry> claim() {
+        return claim(Set.of());
+    }
+
+    @Override
+    @Transactional
+    public List<OutboxEntry> claim(Set<String> eventTypes) {
         return jdbc.sql(
                         """
                 UPDATE outbox_event SET lease_until = :lease, publish_attempts = publish_attempts + 1
                 WHERE id IN (SELECT id FROM outbox_event
                     WHERE published_at IS NULL AND available_at <= :now
                     AND (lease_until IS NULL OR lease_until < :now)
+                    AND (:allEvents OR event_type IN (:types))
                     ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
                 RETURNING id, aggregate_id, event_type, payload::text, publish_attempts
                 """)
                 .param("now", clock.instant().atOffset(ZoneOffset.UTC))
+                .param("allEvents", eventTypes.isEmpty())
+                .param("types", eventTypes.isEmpty() ? Set.of("") : eventTypes)
                 .param(
                         "lease",
                         clock.instant().atOffset(ZoneOffset.UTC).plus(Duration.ofMinutes(6)))
                 .query(OutboxEntry.class)
                 .list();
+    }
+
+    @Override
+    @Transactional
+    public void defer(OutboxEntry event, Duration delay) {
+        jdbc.sql(
+                        """
+                UPDATE outbox_event SET lease_until = NULL, available_at = :retry,
+                    publish_attempts = greatest(publish_attempts - 1, 0)
+                WHERE id = :id AND publish_attempts = :attempt
+                """)
+                .param("id", event.id())
+                .param("attempt", event.publishAttempts())
+                .param("retry", clock.instant().plus(delay).atOffset(ZoneOffset.UTC))
+                .update();
     }
 
     @Override

@@ -16,6 +16,7 @@ import com.closetos.activity.application.ProcessingResults;
 import com.closetos.activity.application.ProcessingTransitions;
 import com.closetos.media.api.AssetDescriptor;
 import com.closetos.media.api.ImageRecord;
+import com.closetos.media.api.MediaAccess;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.ObjectStoragePort.StoredObject;
 import com.closetos.media.api.ProcessingAccess;
@@ -57,6 +58,7 @@ class MediaHttpTest extends PostgresIntegrationTest {
     @Autowired ProcessingResults results;
     @Autowired OutboxAccess outbox;
     @Autowired OutboxQueue queue;
+    @Autowired MediaAccess media;
     @Autowired TransactionTemplate transaction;
     @MockitoBean ObjectStoragePort storage;
 
@@ -74,6 +76,44 @@ class MediaHttpTest extends PostgresIntegrationTest {
                         });
         when(storage.signDownload(any(), any()))
                 .thenAnswer(invocation -> "https://storage.test/" + invocation.getArgument(0));
+    }
+
+    @Test
+    void embeddingUsesConfirmedFrontPhotographAndNeverAnotherOwnersAssets() throws Exception {
+        Fixture fixture = uploaded("embedding-photographs");
+        var result = verifiedResult(fixture.job());
+        results.accept(result, "result:" + fixture.job().jobId());
+        UUID garment = fixture.image().garmentId(), wardrobe = fixture.image().wardrobeId();
+        assertThat(media.embeddingImage(garment, wardrobe)).isEmpty();
+        jdbc.sql(
+                        "UPDATE garment_image SET processing_status = 'READY', image_role = 'BACK' WHERE id = :id")
+                .param("id", fixture.image().id())
+                .update();
+        UUID front = UUID.randomUUID();
+        jdbc.sql(
+                        """
+                INSERT INTO garment_image(id, garment_id, wardrobe_id, user_id, image_role,
+                    original_filename, mime_type, source_s3_key, expected_size, source_checksum,
+                    upload_key, processing_status, assets, created_at)
+                SELECT :front, garment_id, wardrobe_id, user_id, 'FRONT', original_filename,
+                    mime_type, :source, expected_size, source_checksum, :key, 'READY_FOR_REVIEW',
+                    assets, created_at + interval '1 second' FROM garment_image WHERE id = :back
+                """)
+                .param("front", front)
+                .param("source", "test/front/" + front)
+                .param("key", UUID.randomUUID())
+                .param("back", fixture.image().id())
+                .update();
+        assertThat(media.embeddingImage(garment, wardrobe).orElseThrow().imageId())
+                .isEqualTo(fixture.image().id());
+        jdbc.sql("UPDATE garment_image SET processing_status = 'READY' WHERE id = :id")
+                .param("id", front)
+                .update();
+        var selected = media.embeddingImage(garment, wardrobe).orElseThrow();
+        assertThat(selected.imageId()).isEqualTo(front);
+        assertThat(selected.key()).isEqualTo(result.assets().get("display").key());
+        assertThat(selected.checksumSha256()).isEqualTo(CHECKSUM);
+        assertThat(media.embeddingImage(garment, UUID.randomUUID())).isEmpty();
     }
 
     @Test

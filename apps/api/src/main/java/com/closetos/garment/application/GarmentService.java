@@ -17,6 +17,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -40,6 +42,7 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
     private final CatalogueQuery catalogue;
     private final SmartQueryCompiler smartQueries;
     private final com.closetos.media.api.MediaAccess media;
+    private final com.closetos.platform.api.OutboxAccess outbox;
 
     public GarmentService(
             GarmentRepository garments,
@@ -49,7 +52,8 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
             Validator validator,
             CatalogueQuery catalogue,
             SmartQueryCompiler smartQueries,
-            com.closetos.media.api.MediaAccess media) {
+            com.closetos.media.api.MediaAccess media,
+            com.closetos.platform.api.OutboxAccess outbox) {
         this.garments = garments;
         this.wardrobe = wardrobe;
         this.clock = clock;
@@ -58,14 +62,34 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         this.catalogue = catalogue;
         this.smartQueries = smartQueries;
         this.media = media;
+        this.outbox = outbox;
     }
 
     @Transactional
     public GarmentDetails create(GarmentMetadata metadata) {
         validate(metadata);
-        return garments.saveAndFlush(
-                        new Garment(wardrobe.currentWardrobeId(), metadata, clock.instant()))
-                .details();
+        var created =
+                garments.saveAndFlush(
+                                new Garment(
+                                        wardrobe.currentWardrobeId(), metadata, clock.instant()))
+                        .details();
+        enqueueEmbedding(created);
+        return created;
+    }
+
+    @Override
+    @Transactional
+    public Optional<GarmentDetails> embeddingSnapshot(UUID id, UUID wardrobeId) {
+        return garments.embeddingSnapshot(id, wardrobeId).map(Garment::details);
+    }
+
+    private void enqueueEmbedding(GarmentDetails garment) {
+        outbox.enqueue(
+                "garment",
+                garment.id(),
+                "GENERATE_EMBEDDING",
+                "embedding:" + garment.id() + ":" + garment.version(),
+                Map.of("wardrobeId", wardrobe.currentWardrobeId()));
     }
 
     @Override
@@ -143,7 +167,9 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         garment.update(metadata, version.asLong(), clock.instant());
         garment.confirmMetadata();
         media.confirmImages(garment.id(), wardrobe.currentWardrobeId());
-        return garments.saveAndFlush(garment).details();
+        var saved = garments.saveAndFlush(garment).details();
+        enqueueEmbedding(saved);
+        return saved;
     }
 
     @Transactional

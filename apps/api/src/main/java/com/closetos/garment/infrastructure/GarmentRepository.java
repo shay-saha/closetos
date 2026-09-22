@@ -12,6 +12,10 @@ import org.springframework.data.jpa.repository.Query;
 public interface GarmentRepository extends JpaRepository<Garment, UUID> {
     Optional<Garment> findByIdAndWardrobeId(UUID id, UUID wardrobeId);
 
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select g from Garment g where g.id = :id and g.wardrobeId = :wardrobe")
+    Optional<Garment> embeddingSnapshot(UUID id, UUID wardrobe);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from Garment g where g.wardrobeId = :wardrobe and g.id in :ids order by g.id")
     List<Garment> lockOwned(UUID wardrobe, List<UUID> ids);

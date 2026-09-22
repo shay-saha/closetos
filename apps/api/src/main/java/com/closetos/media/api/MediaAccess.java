@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface MediaAccess {
+    Optional<EmbeddingImage> embeddingImage(UUID garment, UUID wardrobe);
+
     Optional<ImageRecord> existingUpload(UUID wardrobe, UUID uploadKey);
 
     ImageRecord reserve(

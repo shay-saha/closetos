@@ -3,10 +3,13 @@ package com.closetos.garment.api;
 import com.closetos.media.api.ProcessingStatus;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
 
 public interface GarmentAccess {
+    Optional<GarmentDetails> embeddingSnapshot(UUID garment, UUID wardrobe);
+
     void validateSmartQuery(ObjectNode query);
 
     GarmentPage select(GarmentFilter filter, GarmentSelection selection);

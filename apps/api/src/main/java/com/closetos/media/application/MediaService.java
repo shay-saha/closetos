@@ -1,6 +1,7 @@
 package com.closetos.media.application;
 
 import com.closetos.media.api.AssetDescriptor;
+import com.closetos.media.api.EmbeddingImage;
 import com.closetos.media.api.ImageRecord;
 import com.closetos.media.api.MediaAccess;
 import com.closetos.media.api.MediaAssets;
@@ -145,6 +146,26 @@ public class MediaService implements MediaAccess {
     }
 
     @Override
+    public Optional<EmbeddingImage> embeddingImage(UUID garment, UUID wardrobe) {
+        return jdbc.sql(
+                        "SELECT "
+                                + COLUMNS
+                                + " FROM garment_image WHERE garment_id = :garment AND wardrobe_id = :wardrobe AND processing_status = 'READY' AND assets IS NOT NULL ORDER BY (image_role = 'FRONT') DESC, created_at, id LIMIT 1")
+                .param("garment", garment)
+                .param("wardrobe", wardrobe)
+                .query(ImageRecord.class)
+                .optional()
+                .map(
+                        image -> {
+                            Map<String, AssetDescriptor> assets =
+                                    json.readValue(image.assets(), new TypeReference<>() {});
+                            var display = assets.get("display");
+                            return new EmbeddingImage(
+                                    image.id(), display.key(), display.checksumSha256());
+                        });
+    }
+
+    @Override
     public List<ImageRecord> imagesFor(UUID garment, UUID wardrobe) {
         return jdbc.sql(
                         "SELECT "
@@ -194,6 +215,12 @@ public class MediaService implements MediaAccess {
                 .param("id", id)
                 .param("wardrobe", wardrobe)
                 .update();
+        outbox.enqueue(
+                "garment",
+                image.garmentId(),
+                "GENERATE_EMBEDDING",
+                "embedding:image-deleted:" + id,
+                Map.of("wardrobeId", wardrobe));
     }
 
     @Override

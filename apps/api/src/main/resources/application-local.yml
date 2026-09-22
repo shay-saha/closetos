@@ -8,6 +8,10 @@ closetos:
   auth:
     client-id: closetos-web
     provider: oidc
+  search:
+    worker-endpoint: http://localhost:8800
+    worker-token: ${MEDIA_WORKER_TOKEN}
+    dispatch-enabled: true
   media:
     storage-mode: local
     endpoint: http://localhost:9000
