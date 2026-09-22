@@ -79,6 +79,21 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
 
     @Override
     @Transactional
+    public List<UUID> matchingIds(GarmentFilter filter, ObjectNode constraints) {
+        return catalogue.matchingIds(wardrobe.currentWardrobeId(), filter, constraints);
+    }
+
+    @Override
+    @Transactional
+    public List<GarmentDetails> ownedDetails(List<UUID> ids) {
+        if (ids.isEmpty()) return List.of();
+        return garments.findByWardrobeIdAndIdIn(wardrobe.currentWardrobeId(), ids).stream()
+                .map(Garment::details)
+                .toList();
+    }
+
+    @Override
+    @Transactional
     public Optional<GarmentDetails> embeddingSnapshot(UUID id, UUID wardrobeId) {
         return garments.embeddingSnapshot(id, wardrobeId).map(Garment::details);
     }

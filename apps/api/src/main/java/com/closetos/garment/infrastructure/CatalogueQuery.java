@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.node.ObjectNode;
 
 @Repository
 public class CatalogueQuery {
@@ -37,6 +38,72 @@ public class CatalogueQuery {
     }
 
     public GarmentPage find(UUID wardrobe, GarmentFilter filter, GarmentSelection selection) {
+        var criteria = criteria(wardrobe, filter, selection);
+        List<String> conditions = new ArrayList<>(criteria.conditions());
+        Map<String, Object> parameters = new LinkedHashMap<>(criteria.parameters());
+        String scope = criteria.scope();
+        CatalogueSort sort = CatalogueSort.of(filter.sort());
+        if (filter.cursor() != null) {
+            CatalogueCursor.Position position = cursors.decode(filter.cursor(), filter, scope);
+            Object value;
+            try {
+                value = sort.parse(position.value());
+            } catch (IllegalArgumentException | java.time.format.DateTimeParseException exception) {
+                throw DomainException.invalid("Invalid pagination cursor.");
+            }
+            conditions.add(
+                    "("
+                            + sort.expression()
+                            + ", id) "
+                            + sort.comparison()
+                            + " (:cursorValue, :cursorId)");
+            parameters.put("cursorValue", value);
+            parameters.put("cursorId", position.id());
+        }
+        String sql =
+                "SELECT * FROM garment WHERE "
+                        + String.join(" AND ", conditions)
+                        + " ORDER BY "
+                        + sort.expression()
+                        + " "
+                        + sort.order()
+                        + ", id "
+                        + sort.order();
+        var query =
+                entityManager
+                        .createNativeQuery(sql, Garment.class)
+                        .setMaxResults(filter.limit() + 1);
+        parameters.forEach(query::setParameter);
+        @SuppressWarnings("unchecked")
+        List<Garment> found = query.getResultList();
+        List<GarmentDetails> items =
+                found.stream().limit(filter.limit()).map(Garment::details).toList();
+        String next =
+                found.size() <= filter.limit()
+                        ? null
+                        : cursors.encode(
+                                items.getLast().id(), sort.value(items.getLast()), filter, scope);
+        return new GarmentPage(items, next);
+    }
+
+    public List<UUID> matchingIds(UUID wardrobe, GarmentFilter filter, ObjectNode rules) {
+        var criteria =
+                criteria(
+                        wardrobe,
+                        filter,
+                        rules == null ? null : new GarmentSelection("search", rules, null));
+        var query =
+                entityManager.createNativeQuery(
+                        "SELECT id FROM garment WHERE "
+                                + String.join(" AND ", criteria.conditions()),
+                        UUID.class);
+        criteria.parameters().forEach(query::setParameter);
+        @SuppressWarnings("unchecked")
+        List<UUID> ids = query.getResultList();
+        return List.copyOf(ids);
+    }
+
+    private Criteria criteria(UUID wardrobe, GarmentFilter filter, GarmentSelection selection) {
         List<String> conditions = new ArrayList<>(List.of("wardrobe_id = :wardrobe"));
         Map<String, Object> parameters = new LinkedHashMap<>(Map.of("wardrobe", wardrobe));
         String scope = wardrobe.toString();
@@ -150,49 +217,11 @@ public class CatalogueQuery {
                     "query",
                     filter.q());
         }
-        CatalogueSort sort = CatalogueSort.of(filter.sort());
-        if (filter.cursor() != null) {
-            CatalogueCursor.Position position = cursors.decode(filter.cursor(), filter, scope);
-            Object value;
-            try {
-                value = sort.parse(position.value());
-            } catch (IllegalArgumentException | java.time.format.DateTimeParseException exception) {
-                throw DomainException.invalid("Invalid pagination cursor.");
-            }
-            conditions.add(
-                    "("
-                            + sort.expression()
-                            + ", id) "
-                            + sort.comparison()
-                            + " (:cursorValue, :cursorId)");
-            parameters.put("cursorValue", value);
-            parameters.put("cursorId", position.id());
-        }
-        String sql =
-                "SELECT * FROM garment WHERE "
-                        + String.join(" AND ", conditions)
-                        + " ORDER BY "
-                        + sort.expression()
-                        + " "
-                        + sort.order()
-                        + ", id "
-                        + sort.order();
-        var query =
-                entityManager
-                        .createNativeQuery(sql, Garment.class)
-                        .setMaxResults(filter.limit() + 1);
-        parameters.forEach(query::setParameter);
-        @SuppressWarnings("unchecked")
-        List<Garment> found = query.getResultList();
-        List<GarmentDetails> items =
-                found.stream().limit(filter.limit()).map(Garment::details).toList();
-        String next =
-                found.size() <= filter.limit()
-                        ? null
-                        : cursors.encode(
-                                items.getLast().id(), sort.value(items.getLast()), filter, scope);
-        return new GarmentPage(items, next);
+        return new Criteria(conditions, parameters, scope);
     }
+
+    private record Criteria(
+            List<String> conditions, Map<String, Object> parameters, String scope) {}
 
     private static void match(
             List<String> conditions,

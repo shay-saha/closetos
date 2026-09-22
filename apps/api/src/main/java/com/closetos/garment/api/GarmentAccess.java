@@ -8,6 +8,12 @@ import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
 
 public interface GarmentAccess {
+    GarmentPage list(GarmentFilter filter);
+
+    List<UUID> matchingIds(GarmentFilter filter, ObjectNode constraints);
+
+    List<GarmentDetails> ownedDetails(List<UUID> garments);
+
     Optional<GarmentDetails> embeddingSnapshot(UUID garment, UUID wardrobe);
 
     void validateSmartQuery(ObjectNode query);

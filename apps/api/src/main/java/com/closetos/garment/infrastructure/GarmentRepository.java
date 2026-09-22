@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 public interface GarmentRepository extends JpaRepository<Garment, UUID> {
     Optional<Garment> findByIdAndWardrobeId(UUID id, UUID wardrobeId);
 
+    List<Garment> findByWardrobeIdAndIdIn(UUID wardrobeId, List<UUID> ids);
+
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select g from Garment g where g.id = :id and g.wardrobeId = :wardrobe")
     Optional<Garment> embeddingSnapshot(UUID id, UUID wardrobe);
