@@ -82,7 +82,7 @@ class PostgresOutbox implements OutboxAccess, OutboxQueue {
                         """
                 UPDATE outbox_event SET lease_until = NULL, available_at = :retry,
                     publish_attempts = greatest(publish_attempts - 1, 0)
-                WHERE id = :id AND publish_attempts = :attempt
+                WHERE id = :id AND publish_attempts = :attempt AND published_at IS NULL
                 """)
                 .param("id", event.id())
                 .param("attempt", event.publishAttempts())
@@ -94,7 +94,7 @@ class PostgresOutbox implements OutboxAccess, OutboxQueue {
     @Transactional
     public void published(OutboxEntry event) {
         jdbc.sql(
-                        "UPDATE outbox_event SET published_at = :now, lease_until = NULL WHERE id = :id AND publish_attempts = :attempt")
+                        "UPDATE outbox_event SET published_at = :now, lease_until = NULL, failure_detail = NULL WHERE id = :id AND publish_attempts = :attempt AND published_at IS NULL")
                 .param("now", clock.instant().atOffset(ZoneOffset.UTC))
                 .param("id", event.id())
                 .param("attempt", event.publishAttempts())
@@ -108,7 +108,7 @@ class PostgresOutbox implements OutboxAccess, OutboxQueue {
                         """
                 UPDATE outbox_event SET lease_until = NULL, failure_detail = :detail,
                     available_at = :retry, published_at = :terminal
-                WHERE id = :id AND publish_attempts = :attempt
+                WHERE id = :id AND publish_attempts = :attempt AND published_at IS NULL
                 """)
                 .param("id", event.id())
                 .param("attempt", event.publishAttempts())

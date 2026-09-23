@@ -19,32 +19,50 @@ public class EmbeddingGeneration {
     private final EmbeddingWorkRegistry registry;
     private final OutboxQueue queue;
     private final JsonMapper json;
+    private final ReembeddingJobTracker jobs;
 
     public EmbeddingGeneration(
             EmbeddingInputLoader inputs,
             EmbeddingProviderPort provider,
             EmbeddingWorkRegistry registry,
             OutboxQueue queue,
-            JsonMapper json) {
+            JsonMapper json,
+            ReembeddingJobTracker jobs) {
         this.inputs = inputs;
         this.provider = provider;
         this.registry = registry;
         this.queue = queue;
         this.json = json;
+        this.jobs = jobs;
     }
 
     public void generate(OutboxEntry event) {
         EmbeddingProviderPort.ModelInfo model = null;
         try {
-            UUID wardrobe =
-                    UUID.fromString(json.readTree(event.payload()).path("wardrobeId").asText());
+            var checkpoint = jobs.checkpoint(event);
+            if (checkpoint.isPresent()) {
+                if ("FAILED".equals(checkpoint.get().outcome()))
+                    queue.failed(event, checkpoint.get().failureCode(), true);
+                else queue.published(event);
+                return;
+            }
+            var payload = json.readTree(event.payload());
+            UUID wardrobe = UUID.fromString(payload.path("wardrobeId").asText());
             var material = inputs.load(event.aggregateId(), wardrobe);
             if (material.isEmpty()) {
+                jobs.outcome(event, "SKIPPED", null);
                 queue.published(event);
                 return;
             }
             model = provider.model();
+            if ("REBUILD_EMBEDDING".equals(event.eventType())
+                    && !model.modelKey().equals(payload.path("modelKey").asText()))
+                throw new DomainException(
+                        400,
+                        "EMBEDDING_MODEL_CHANGED",
+                        "The configured embedding model changed. Start a new rebuild.");
             if (!registry.begin(event, material.get(), model)) {
+                jobs.outcome(event, "SUCCEEDED", null);
                 queue.published(event);
                 return;
             }
@@ -59,7 +77,13 @@ public class EmbeddingGeneration {
                             || exception instanceof DomainException domain
                                     && domain.status() == 400;
             registry.failed(event, model, terminal);
-            queue.failed(event, "EMBEDDING_FAILURE", terminal);
+            String failure =
+                    exception instanceof DomainException domain
+                                    && "EMBEDDING_MODEL_CHANGED".equals(domain.code())
+                            ? "EMBEDDING_MODEL_CHANGED"
+                            : "EMBEDDING_FAILURE";
+            jobs.outcome(event, terminal ? "FAILED" : null, failure);
+            queue.failed(event, failure, terminal);
             LOG.warn(
                     "Embedding job {} failed ({})",
                     event.id(),

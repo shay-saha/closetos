@@ -25,6 +25,15 @@ public class WardrobeService implements WardrobeAccess {
         return current().id();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean exists(UUID wardrobe) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM wardrobe WHERE id = :id)")
+                .param("id", wardrobe)
+                .query(Boolean.class)
+                .single();
+    }
+
     @Transactional
     public WardrobeDetails current() {
         UUID owner = identity.currentUserId();

@@ -98,6 +98,12 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
         return garments.embeddingSnapshot(id, wardrobeId).map(Garment::details);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.closetos.garment.api.EmbeddingTarget> embeddingTargets(UUID wardrobeId) {
+        return catalogue.embeddingTargets(wardrobeId);
+    }
+
     private void enqueueEmbedding(GarmentDetails garment) {
         outbox.enqueue(
                 "garment",

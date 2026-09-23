@@ -17,11 +17,20 @@ public class EmbeddingWorkRegistry {
     private final JdbcClient jdbc;
     private final Clock clock;
     private final EmbeddingInputLoader inputs;
+    private final EmbeddingModels models;
+    private final ReembeddingJobTracker jobs;
 
-    public EmbeddingWorkRegistry(JdbcClient jdbc, Clock clock, EmbeddingInputLoader inputs) {
+    public EmbeddingWorkRegistry(
+            JdbcClient jdbc,
+            Clock clock,
+            EmbeddingInputLoader inputs,
+            EmbeddingModels models,
+            ReembeddingJobTracker jobs) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.inputs = inputs;
+        this.models = models;
+        this.jobs = jobs;
     }
 
     @Transactional
@@ -30,37 +39,25 @@ public class EmbeddingWorkRegistry {
                 .param("scope", material.garmentId() + ":" + info.modelKey())
                 .query()
                 .singleRow();
-        var model = info.model();
-        jdbc.sql(
-                        """
-                INSERT INTO embedding_model(model_key, provider, model_id, model_version, pipeline_version, dimensions)
-                VALUES (:key, :provider, :id, :version, :pipeline, :dimensions) ON CONFLICT (model_key) DO NOTHING
-                """)
-                .param("key", info.modelKey())
-                .param("provider", model.provider())
-                .param("id", model.modelId())
-                .param("version", model.modelVersion())
-                .param("pipeline", model.pipelineVersion())
-                .param("dimensions", model.dimensions())
-                .update();
-        var existing =
-                jdbc.sql(
-                                "SELECT provider, model_id, model_version, pipeline_version, dimensions FROM embedding_model WHERE model_key = :key")
-                        .param("key", info.modelKey())
-                        .query(com.closetos.search.api.EmbeddingModel.class)
-                        .single();
-        if (!existing.equals(model))
-            throw new IllegalStateException(
-                    "An embedding model key was reused with a different identity.");
+        models.register(info);
         var current =
                 jdbc.sql(
-                                "SELECT source_fingerprint FROM garment_embedding WHERE garment_id = :garment AND wardrobe_id = :wardrobe AND model_key = :key")
+                                "SELECT source_fingerprint, generation_event FROM garment_embedding WHERE garment_id = :garment AND wardrobe_id = :wardrobe AND model_key = :key")
                         .param("garment", material.garmentId())
                         .param("wardrobe", material.wardrobeId())
                         .param("key", info.modelKey())
-                        .query(String.class)
+                        .query(
+                                (rs, row) ->
+                                        new Stored(
+                                                rs.getString("source_fingerprint"),
+                                                rs.getObject("generation_event", UUID.class)))
                         .optional();
-        if (current.filter(material.fingerprint()::equals).isPresent()) return false;
+        boolean rebuild = "REBUILD_EMBEDDING".equals(event.eventType());
+        if (current.filter(
+                        stored ->
+                                material.fingerprint().equals(stored.fingerprint())
+                                        && (!rebuild || event.id().equals(stored.event())))
+                .isPresent()) return false;
         var busy =
                 jdbc.sql(
                                 "SELECT count(*) FROM garment_embedding_work WHERE garment_id = :garment AND model_key = :key AND state = 'RUNNING' AND lease_until > :now")
@@ -95,7 +92,10 @@ public class EmbeddingWorkRegistry {
     public boolean complete(
             OutboxEntry event, Material material, ModelInfo info, VectorResult result) {
         var current = inputs.load(material.garmentId(), material.wardrobeId());
-        if (current.isEmpty()) return true;
+        if (current.isEmpty()) {
+            jobs.outcome(event, "SKIPPED", null);
+            return true;
+        }
         var owner =
                 jdbc.sql(
                                 "SELECT lease_owner FROM garment_embedding_work WHERE garment_id = :garment AND model_key = :key FOR UPDATE")
@@ -116,20 +116,22 @@ public class EmbeddingWorkRegistry {
                         + "]";
         jdbc.sql(
                         """
-                INSERT INTO garment_embedding(garment_id, wardrobe_id, model_key, dimensions, embedding, source_fingerprint, updated_at)
-                VALUES (:garment, :wardrobe, :key, :dimensions, CAST(:vector AS vector), :fingerprint, :now)
+                INSERT INTO garment_embedding(garment_id, wardrobe_id, model_key, dimensions, embedding, source_fingerprint, updated_at, generation_event)
+                VALUES (:garment, :wardrobe, :key, :dimensions, CAST(:vector AS vector), :fingerprint, :now, :event)
                 ON CONFLICT (garment_id, model_key) DO UPDATE SET embedding = EXCLUDED.embedding,
-                    source_fingerprint = EXCLUDED.source_fingerprint, updated_at = EXCLUDED.updated_at
+                    source_fingerprint = EXCLUDED.source_fingerprint, updated_at = EXCLUDED.updated_at, generation_event = EXCLUDED.generation_event
                 """)
                 .param("garment", material.garmentId())
                 .param("wardrobe", material.wardrobeId())
                 .param("key", info.modelKey())
                 .param("dimensions", info.model().dimensions())
                 .param("vector", vector)
+                .param("event", event.id())
                 .param("fingerprint", material.fingerprint())
                 .param("now", now())
                 .update();
         state(event, info.modelKey(), "READY", null);
+        jobs.outcome(event, "SUCCEEDED", null);
         return true;
     }
 
@@ -158,6 +160,8 @@ public class EmbeddingWorkRegistry {
     private Timestamp now() {
         return Timestamp.from(clock.instant());
     }
+
+    private record Stored(String fingerprint, UUID event) {}
 
     public static final class Busy extends RuntimeException {}
 }

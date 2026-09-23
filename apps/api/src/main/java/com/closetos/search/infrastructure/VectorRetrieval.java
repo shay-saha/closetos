@@ -17,7 +17,7 @@ public class VectorRetrieval {
             SELECT e.garment_id, e.embedding
             FROM garment_embedding e
             JOIN garment_embedding_work w ON w.garment_id = e.garment_id AND w.model_key = e.model_key
-            WHERE e.wardrobe_id = :wardrobe AND e.model_key = :model AND w.state = 'READY'
+            WHERE e.wardrobe_id = :wardrobe AND e.model_key = :model
                 AND w.source_fingerprint = e.source_fingerprint
                 AND NOT EXISTS (SELECT 1 FROM outbox_event o WHERE o.aggregate_id = e.garment_id
                     AND o.event_type = 'GENERATE_EMBEDDING'

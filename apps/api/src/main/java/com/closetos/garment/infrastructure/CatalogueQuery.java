@@ -103,6 +103,24 @@ public class CatalogueQuery {
         return List.copyOf(ids);
     }
 
+    public List<com.closetos.garment.api.EmbeddingTarget> embeddingTargets(UUID wardrobe) {
+        var query =
+                entityManager.createNativeQuery(
+                        "SELECT id, wardrobe_id FROM garment WHERE processing_status = 'READY'"
+                                + (wardrobe == null ? "" : " AND wardrobe_id = :wardrobe")
+                                + " ORDER BY id",
+                        Object[].class);
+        if (wardrobe != null) query.setParameter("wardrobe", wardrobe);
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = query.getResultList();
+        return rows.stream()
+                .map(
+                        row ->
+                                new com.closetos.garment.api.EmbeddingTarget(
+                                        (UUID) row[0], (UUID) row[1]))
+                .toList();
+    }
+
     private Criteria criteria(UUID wardrobe, GarmentFilter filter, GarmentSelection selection) {
         List<String> conditions = new ArrayList<>(List.of("wardrobe_id = :wardrobe"));
         Map<String, Object> parameters = new LinkedHashMap<>(Map.of("wardrobe", wardrobe));

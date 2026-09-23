@@ -14,6 +14,8 @@ public interface GarmentAccess {
 
     List<GarmentDetails> ownedDetails(List<UUID> garments);
 
+    List<EmbeddingTarget> embeddingTargets(UUID wardrobe);
+
     Optional<GarmentDetails> embeddingSnapshot(UUID garment, UUID wardrobe);
 
     void validateSmartQuery(ObjectNode query);
