@@ -25,6 +25,7 @@ local_media = {
     "MINIO_ROOT_USER": "closetos-local",
     "MINIO_ROOT_PASSWORD": secrets.token_urlsafe(32),
     "MEDIA_WORKER_TOKEN": secrets.token_urlsafe(48),
+    "KC_BOOTSTRAP_ADMIN_PASSWORD": secrets.token_urlsafe(48),
 }
 with environment.open("a") as target:
     for key, value in local_media.items():

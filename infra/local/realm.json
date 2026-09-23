@@ -2,6 +2,7 @@
   "realm": "closetos",
   "enabled": true,
   "registrationAllowed": true,
+  "roles": { "realm": [{ "name": "closetos-admin", "description": "Wardrobe search administration" }] },
   "registrationEmailAsUsername": true,
   "resetPasswordAllowed": true,
   "clients": [{

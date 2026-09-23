@@ -14,12 +14,17 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 class SecurityConfiguration {
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http, @Value("${closetos.auth.provider:cognito}") String provider)
+            throws Exception {
+        var authentication = new JwtAuthenticationConverter();
+        authentication.setJwtGrantedAuthoritiesConverter(new AdministratorAuthorities(provider));
         return http.csrf(csrf -> csrf.disable())
                 .sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -28,13 +33,15 @@ class SecurityConfiguration {
                                 authorize
                                         .requestMatchers("/actuator/health", "/actuator/health/**")
                                         .permitAll()
+                                        .requestMatchers("/api/v1/admin", "/api/v1/admin/**")
+                                        .hasAuthority("ROLE_CLOSETOS_ADMIN")
                                         .requestMatchers("/api/v1/**")
                                         .authenticated()
                                         .anyRequest()
                                         .denyAll())
                 .oauth2ResourceServer(
                         resource ->
-                                resource.jwt(jwt -> {})
+                                resource.jwt(jwt -> jwt.jwtAuthenticationConverter(authentication))
                                         .authenticationEntryPoint(
                                                 (request, response, exception) ->
                                                         SecurityProblem.write(
