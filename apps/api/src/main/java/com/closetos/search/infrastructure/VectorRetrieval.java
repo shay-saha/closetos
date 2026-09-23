@@ -12,7 +12,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 public class VectorRetrieval {
-    private static final String CURRENT_VECTOR =
+    static final String CURRENT_VECTOR =
             """
             SELECT e.garment_id, e.embedding
             FROM garment_embedding e
