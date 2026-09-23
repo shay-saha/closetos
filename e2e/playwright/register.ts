@@ -6,9 +6,8 @@ export async function register(page: Page) {
   await page.getByRole("button", { name: "Open your wardrobe" }).click();
   await page.getByRole("link", { name: "Register", exact: true }).click();
   const identity = randomUUID();
-  await page
-    .getByRole("textbox", { name: "Email", exact: false })
-    .fill(`closetos-${identity}@example.test`);
+  const email = `closetos-${identity}@example.test`;
+  await page.getByRole("textbox", { name: "Email", exact: false }).fill(email);
   await page.locator("#password").fill(`Local-${identity}!`);
   await page.locator("#password-confirm").fill(`Local-${identity}!`);
   await page.getByRole("textbox", { name: "First name" }).fill("Wardrobe");
@@ -18,4 +17,5 @@ export async function register(page: Page) {
   await expect(
     page.getByRole("heading", { name: "A little space for possibility." }),
   ).toBeVisible();
+  return { email };
 }

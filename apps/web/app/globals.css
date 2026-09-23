@@ -1198,3 +1198,50 @@ textarea:focus {
     gap: 1rem;
   }
 }
+
+.reembedding-admin {
+  margin-top: 4rem;
+  border-top: 1px solid var(--line);
+  padding-top: 2rem;
+  max-width: 900px;
+}
+.reembedding-admin > p {
+  max-width: 65ch;
+}
+.reembedding-jobs {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+.reembedding-job {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.reembedding-job h3 {
+  font-size: 1.2rem;
+}
+.reembedding-job progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.reembedding-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.reembedding-counts dt {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.reembedding-counts dd {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.reembedding-job summary {
+  min-height: 44px;
+  padding: 0.75rem 0;
+  cursor: pointer;
+}

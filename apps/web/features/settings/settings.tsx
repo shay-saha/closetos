@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingState } from "@/components/ui/feedback";
+import { ReembeddingAdmin } from "@/features/search/reembedding-admin";
 import { api } from "@/lib/api";
 
 const preferencesSchema = z.object({
@@ -127,6 +128,7 @@ export function Settings() {
         pending={save.isPending}
         error={save.error}
       />
+      <ReembeddingAdmin />
     </div>
   );
 }
