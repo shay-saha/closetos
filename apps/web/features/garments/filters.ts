@@ -1,0 +1,15 @@
+export const advancedFilters = [
+  ["subcategory", "Subcategory", "text"],
+  ["colour", "Colour", "text"],
+  ["brand", "Brand", "text"],
+  ["size", "Size", "text"],
+  ["formality", "Formality", "text"],
+  ["season", "Season tag", "text"],
+  ["occasion", "Occasion tag", "text"],
+  ["tag", "Style tag", "text"],
+  ["minWearCount", "Minimum wears", "number"],
+  ["maxWearCount", "Maximum wears", "number"],
+  ["notWornSince", "Not worn since, including never worn", "date"],
+  ["purchasedAfter", "Purchased on or after", "date"],
+  ["purchasedBefore", "Purchased on or before", "date"],
+] as const;

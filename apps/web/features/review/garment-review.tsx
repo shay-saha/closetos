@@ -42,6 +42,7 @@ export function GarmentReview({
       client.setQueryData(["garment", garment.id], saved);
       await Promise.all([
         client.invalidateQueries({ queryKey: ["garments"] }),
+        client.invalidateQueries({ queryKey: ["search"] }),
         client.invalidateQueries({ queryKey: ["suggestions", garment.id] }),
         engine?.reviewed(garment.id),
       ]);

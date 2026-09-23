@@ -1069,3 +1069,132 @@ textarea:focus {
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
+.wardrobe-search-form {
+  border-block: 1px solid var(--line);
+  padding: 1.5rem 0 0;
+  margin-bottom: 2rem;
+}
+.search-query-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 250px) auto;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+.search-query-row .field {
+  min-width: 0;
+}
+.search-query-row input,
+.search-query-row select {
+  width: 100%;
+}
+.search-photo-options summary {
+  cursor: pointer;
+  padding: 0.75rem 0;
+  min-height: 44px;
+}
+.search-photo-picker {
+  display: flex;
+  align-items: start;
+  gap: 1.5rem;
+  padding: 1rem 0;
+  max-width: 700px;
+}
+.search-photo-picker > div {
+  min-width: 0;
+}
+.search-photo-picker img {
+  object-fit: contain;
+  background: var(--surface);
+  border-radius: 3px;
+}
+.search-photo-picker .small {
+  margin: 0.75rem 0;
+}
+.search-photo-name {
+  overflow-wrap: anywhere;
+}
+.search-source,
+.search-results-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.search-source {
+  background: var(--surface);
+  padding: 1rem;
+}
+.search-source p,
+.search-results-heading p {
+  margin: 0;
+}
+.search-source a {
+  text-decoration: underline;
+}
+.search-constraints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.search-constraints .button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  min-height: 44px;
+}
+.search-interpretation {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+.search-interpretation h2 {
+  font-size: 1.5rem;
+}
+.search-interpretation ul {
+  padding-left: 1.25rem;
+}
+.search-results .piece-card h3 {
+  font-size: 0.95rem;
+  margin: 0.85rem 0 0.25rem;
+}
+.search-match-reasons {
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding-left: 1rem;
+  margin: 0.75rem 0 0;
+}
+@media (max-width: 1200px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+  .app-header .wordmark {
+    flex: 1;
+  }
+  .app-header nav {
+    order: 3;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}
+@media (max-width: 700px) {
+  .app-header nav a {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .search-query-row {
+    grid-template-columns: 1fr;
+  }
+  .wardrobe-search-form input,
+  .wardrobe-search-form select {
+    font-size: 1rem;
+  }
+  .search-photo-picker {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}

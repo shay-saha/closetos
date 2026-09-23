@@ -8,23 +8,9 @@ import { ErrorState, LoadingState } from "@/components/ui/feedback";
 import { useGarments } from "./queries";
 import { categories, categoryNames } from "./types";
 import { GarmentArt } from "./garment-art";
+import { advancedFilters } from "./filters";
 import { smartViews } from "@/features/collections/types";
 
-const advancedFilters = [
-  ["subcategory", "Subcategory", "text"],
-  ["colour", "Colour", "text"],
-  ["brand", "Brand", "text"],
-  ["size", "Size", "text"],
-  ["formality", "Formality", "text"],
-  ["season", "Season tag", "text"],
-  ["occasion", "Occasion tag", "text"],
-  ["tag", "Style tag", "text"],
-  ["minWearCount", "Minimum wears", "number"],
-  ["maxWearCount", "Maximum wears", "number"],
-  ["notWornSince", "Not worn since, including never worn", "date"],
-  ["purchasedAfter", "Purchased on or after", "date"],
-  ["purchasedBefore", "Purchased on or before", "date"],
-] as const;
 const viewSorts: Record<string, string> = {
   RECENTLY_WORN: "RECENTLY_WORN",
   MOST_WORN: "MOST_WORN",

@@ -37,6 +37,7 @@ export function CaptureProvider({
       wardrobeId
         ? new UploadEngine(wardrobeId, () => {
             void client.invalidateQueries({ queryKey: ["garments"] });
+            void client.invalidateQueries({ queryKey: ["search"] });
             void client.invalidateQueries({ queryKey: ["garment"] });
           })
         : null,

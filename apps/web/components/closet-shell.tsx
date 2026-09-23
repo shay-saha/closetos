@@ -2,13 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Shirt, LayoutGrid, Plus, LogOut, ListChecks, Settings, Layers } from "lucide-react";
+import {
+  Shirt,
+  LayoutGrid,
+  Plus,
+  LogOut,
+  ListChecks,
+  Settings,
+  Layers,
+  Search,
+} from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "./ui/button";
 
 const destinations = [
   { href: "/wardrobe", label: "Wardrobe", Icon: Shirt },
   { href: "/catalogue", label: "Catalogue", Icon: LayoutGrid },
+  { href: "/search", label: "Search", Icon: Search },
   { href: "/review", label: "Review", Icon: ListChecks },
   { href: "/outfits", label: "Outfits", Icon: Layers },
 ];

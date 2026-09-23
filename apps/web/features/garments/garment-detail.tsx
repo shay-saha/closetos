@@ -26,6 +26,7 @@ export function GarmentDetail({ id }: { id: string }) {
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["garments"] }),
+      client.invalidateQueries({ queryKey: ["search"] }),
       client.invalidateQueries({ queryKey: ["garment", id] }),
     ]);
   };
@@ -177,6 +178,14 @@ export function GarmentDetail({ id }: { id: string }) {
               {garment.processingStatus === "READY" && (
                 <Link className="button button-secondary" href={`/studio?garment=${id}`}>
                   Add to outfit
+                </Link>
+              )}
+              {garment.processingStatus === "READY" && (
+                <Link
+                  className="button button-secondary"
+                  href={`/search?similarToGarmentId=${id}&mode=SEMANTIC`}
+                >
+                  Find similar pieces
                 </Link>
               )}
               <Dialog.Root>

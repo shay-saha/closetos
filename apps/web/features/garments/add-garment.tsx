@@ -15,7 +15,10 @@ export function AddGarment() {
     mutationFn: (metadata: GarmentMetadata) =>
       api<Garment>("garments", { method: "POST", body: JSON.stringify(metadata) }),
     onSuccess: async (garment) => {
-      await client.invalidateQueries({ queryKey: ["garments"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["garments"] }),
+        client.invalidateQueries({ queryKey: ["search"] }),
+      ]);
       router.push(`/garments/${garment.id}`);
     },
   });
