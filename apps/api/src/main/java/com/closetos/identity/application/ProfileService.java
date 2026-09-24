@@ -1,6 +1,7 @@
 package com.closetos.identity.application;
 
 import com.closetos.identity.api.IdentityAccess;
+import com.closetos.identity.api.ProfileAccess;
 import com.closetos.identity.api.ProfileDetails;
 import com.closetos.identity.api.ProfileUpdate;
 import com.closetos.platform.api.DomainException;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class ProfileService {
+public class ProfileService implements ProfileAccess {
     private final IdentityAccess identity;
     private final JdbcClient jdbc;
 
@@ -24,6 +25,7 @@ public class ProfileService {
         this.jdbc = jdbc;
     }
 
+    @Override
     @Transactional
     public ProfileDetails current() {
         return profile(identity.currentUserId());
