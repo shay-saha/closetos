@@ -30,6 +30,8 @@ public interface GarmentAccess {
 
     GarmentDetails patch(UUID garment, ObjectNode patch);
 
+    GarmentDetails status(UUID garment, GarmentStatus status, long version);
+
     GarmentDetails createDraft(UUID wardrobe);
 
     GarmentDetails owned(UUID garment);
