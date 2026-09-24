@@ -166,6 +166,22 @@ public class MediaService implements MediaAccess {
     }
 
     @Override
+    public java.util.Set<UUID> approvedPhotoGarments(Collection<UUID> garments, UUID wardrobe) {
+        if (garments.isEmpty()) return java.util.Set.of();
+        return java.util.Set.copyOf(
+                jdbc.sql(
+                                """
+                SELECT DISTINCT garment_id FROM garment_image
+                WHERE wardrobe_id = :wardrobe AND garment_id IN (:garments)
+                    AND processing_status = 'READY' AND assets IS NOT NULL
+                """)
+                        .param("wardrobe", wardrobe)
+                        .param("garments", garments)
+                        .query(UUID.class)
+                        .list());
+    }
+
+    @Override
     public List<ImageRecord> imagesFor(UUID garment, UUID wardrobe) {
         return jdbc.sql(
                         "SELECT "

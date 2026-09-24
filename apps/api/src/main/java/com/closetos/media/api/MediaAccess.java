@@ -4,10 +4,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface MediaAccess {
     Optional<EmbeddingImage> embeddingImage(UUID garment, UUID wardrobe);
+
+    Set<UUID> approvedPhotoGarments(Collection<UUID> garments, UUID wardrobe);
 
     Optional<ImageRecord> existingUpload(UUID wardrobe, UUID uploadKey);
 
