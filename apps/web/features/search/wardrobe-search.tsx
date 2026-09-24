@@ -58,6 +58,9 @@ export function WardrobeSearch() {
           <Link href="/discover/insights" className="button button-secondary">
             Wardrobe insights
           </Link>
+          <Link href="/discover/topology" className="button button-secondary">
+            Wardrobe topology
+          </Link>
           <Link href="/search" className="button button-quiet">
             Start again
           </Link>

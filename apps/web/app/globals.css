@@ -186,6 +186,228 @@
   margin-top: 2.5rem;
 }
 
+.page.topology-page {
+  padding-top: 2rem;
+}
+.topology-page h1 {
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  margin-bottom: 0.75rem;
+}
+.topology-page .page-intro {
+  margin-bottom: 1.25rem;
+}
+.topology-page .page-intro p:not(.eyebrow) {
+  margin-bottom: 0;
+}
+
+.topology-toolbar,
+.topology-selection-controls,
+.topology-view-controls,
+.topology-camera-controls,
+.topology-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.topology-toolbar {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.topology-toolbar label,
+.topology-selection-controls > label:first-child {
+  display: grid;
+  gap: 0.4rem;
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+.topology-toolbar select,
+.topology-selection-controls select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.topology-view-controls {
+  align-self: end;
+}
+.topology-stage {
+  position: relative;
+  height: clamp(360px, 60vh, 640px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.topology-stage canvas {
+  cursor: grab;
+  touch-action: none;
+}
+.topology-stage.topology-hovering canvas {
+  cursor: pointer;
+}
+.topology-loading {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.topology-legend {
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+.topology-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.topology-legend i {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.topology-selection-controls {
+  margin-bottom: 0.75rem;
+}
+.topology-edge-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+.topology-edge-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+.topology-camera-controls {
+  margin: 0.75rem 0;
+  gap: 0.5rem;
+}
+.topology-camera-controls .button {
+  font-size: 0.875rem;
+  padding-inline: 0.75rem;
+}
+.topology-hover {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  max-width: 26rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.topology-hover-art {
+  width: 48px;
+  flex-shrink: 0;
+}
+.topology-hover-art .manual-label {
+  display: none;
+}
+.topology-hover span {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.topology-featured {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+}
+.topology-featured-art {
+  width: 100px;
+  flex-shrink: 0;
+}
+.topology-featured-art .manual-label,
+.topology-piece-art .manual-label {
+  display: none;
+}
+.topology-featured h2 {
+  margin-bottom: 0.5rem;
+}
+.topology-list {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+.topology-list > ul {
+  list-style: none;
+  padding: 0;
+}
+.topology-list > ul > li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.topology-list-selected {
+  background: var(--accent-light);
+}
+.topology-piece-link {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.topology-piece-link h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  overflow-wrap: anywhere;
+}
+.topology-piece-link p {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 0;
+}
+.topology-piece-art {
+  width: 60px;
+  flex-shrink: 0;
+}
+.topology-piece-art .piece-art {
+  aspect-ratio: 1;
+}
+.topology-list details {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  padding-left: 0.5rem;
+}
+.topology-list summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.topology-list details[open] > summary svg {
+  transform: rotate(90deg);
+}
+.topology-list details a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 :root {
   --paper: #f6f3ed;
   --surface: #fffcf7;
