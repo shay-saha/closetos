@@ -159,6 +159,45 @@ test("learned text and photo retrieval find related pieces while filters and wea
     neighbours.items.every((hit: { garment: { id: string } }) => hit.garment.id !== garments[0].id),
   ).toBe(true);
 
+  const topologyResponse = await page.request.get("/api/backend/insights/topology?neighbours=2");
+  expect(topologyResponse.status()).toBe(200);
+  const graph = await topologyResponse.json();
+  expect(graph).toMatchObject({
+    eligibleCount: 5,
+    indexedCount: 5,
+    truncated: false,
+    embeddingAvailability: "AVAILABLE",
+    model: { provider: "local-clip", dimensions: 512 },
+  });
+  expect(graph.nodes.map((node: { id: string }) => node.id).sort()).toEqual(
+    garments.map((garment) => garment.id).sort(),
+  );
+  expect(graph.edges.length).toBeLessThanOrEqual(10);
+  expect(
+    graph.edges.some(
+      (edge: { source: string; target: string; weight: number }) =>
+        shirts.includes(edge.source) && shirts.includes(edge.target) && edge.weight > 0,
+    ),
+  ).toBe(true);
+  const pairs = new Set<string>();
+  for (const edge of graph.edges) {
+    expect(edge.source).not.toBe(edge.target);
+    expect(edge.weight).toBeGreaterThanOrEqual(0);
+    expect(edge.weight).toBeLessThanOrEqual(1);
+    const pair = [edge.source, edge.target].sort().join(":");
+    expect(pairs.has(pair)).toBe(false);
+    pairs.add(pair);
+  }
+  const tops = await (await page.request.get("/api/backend/insights/topology?category=TOP")).json();
+  expect(tops.nodes.map((node: { id: string }) => node.id).sort()).toEqual([...shirts].sort());
+  expect(tops.edges).toHaveLength(1);
+  const shoes = await (
+    await page.request.get("/api/backend/insights/topology?category=SHOES")
+  ).json();
+  expect(shoes.nodes.map((node: { id: string }) => node.id)).toEqual([garments[2].id]);
+  expect(shoes.edges).toEqual([]);
+  expect(JSON.stringify(graph)).not.toMatch(/"(?:vector|modelKey|sourceFingerprint|percentage)"/);
+
   const photograph = await readFile("e2e/fixtures/shirt.png");
   const image = await page.request.post("/api/backend/search/image", {
     headers,
@@ -207,6 +246,9 @@ test("learned text and photo retrieval find related pieces while filters and wea
     expect(
       (await other.request.get(`/api/backend/garments/${garments[0].id}/similar`)).status(),
     ).toBe(404);
+    const foreignGraph = await (await other.request.get("/api/backend/insights/topology")).json();
+    expect(foreignGraph.nodes).toEqual([]);
+    expect(foreignGraph.edges).toEqual([]);
   } finally {
     await stranger.close();
   }
