@@ -1,5 +1,191 @@
 @import "tailwindcss";
 
+.insights-page .page-intro h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+}
+.insight-tabs,
+.insight-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.insight-toolbar {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper);
+}
+.insight-toolbar > label,
+.insight-currency {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+.insight-toolbar select,
+.insight-currency select {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+}
+.insight-toolbar > .insight-checkbox {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 0.5rem;
+}
+.insight-checkbox input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+.insight-currency {
+  max-width: 16rem;
+  margin-block: 1.5rem;
+}
+.insight-as-of,
+.insight-context,
+.insight-empty-note {
+  max-width: 72ch;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-block: 1rem;
+}
+.insight-as-of {
+  font-size: 0.875rem;
+}
+.insight-result-count {
+  margin-block: 1.25rem;
+}
+.insight-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+.insight-stats > div {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper);
+  min-width: 0;
+}
+.insight-stats dt {
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.insight-stats dd {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.insight-breakdown {
+  margin-block: 2.5rem;
+}
+.insight-breakdown > ul {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.25rem;
+  padding: 0;
+  margin-top: 1rem;
+}
+.insight-breakdown li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+.insight-category-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  background: var(--line);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.insight-category-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--muted);
+}
+.insight-columns,
+.forgotten-pieces {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1.5rem;
+  margin-block: 2rem;
+}
+.insight-list-section,
+.forgotten-pieces > li {
+  min-width: 0;
+}
+.insight-list-section > h2 {
+  margin-bottom: 1rem;
+}
+.insight-pieces,
+.forgotten-pieces {
+  list-style: none;
+  padding: 0;
+}
+.insight-pieces > li,
+.forgotten-pieces > li {
+  border-bottom: 1px solid var(--line);
+}
+.insight-piece {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0;
+  text-decoration: none;
+  min-height: 88px;
+}
+.insight-piece .piece-art {
+  width: 52px;
+  height: 68px;
+}
+.insight-piece .manual-label {
+  display: none;
+}
+.insight-piece-copy {
+  display: grid;
+  gap: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.insight-piece-copy > span {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.insight-piece:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.forgotten-pieces summary,
+.insight-calculations summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+}
+.forgotten-pieces details > ul,
+.insight-calculations > ul {
+  padding: 0 0 1rem 1.25rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.forgotten-pieces details li,
+.insight-calculations li {
+  margin-bottom: 0.5rem;
+}
+.insight-calculations {
+  border-top: 1px solid var(--line);
+  margin-top: 2.5rem;
+}
+
 :root {
   --paper: #f6f3ed;
   --surface: #fffcf7;

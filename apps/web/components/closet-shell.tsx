@@ -40,7 +40,9 @@ export function ClosetShell({ children }: { children: React.ReactNode }) {
               key={href}
               href={href}
               aria-current={
-                path === href || (href === "/catalogue" && path.startsWith("/collections"))
+                path === href ||
+                (href === "/catalogue" && path.startsWith("/collections")) ||
+                (href === "/search" && path.startsWith("/discover"))
                   ? "page"
                   : undefined
               }

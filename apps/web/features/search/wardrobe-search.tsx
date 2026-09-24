@@ -54,9 +54,14 @@ export function WardrobeSearch() {
             your wardrobe.
           </p>
         </div>
-        <Link href="/search" className="button button-quiet">
-          Start again
-        </Link>
+        <div className="form-actions">
+          <Link href="/discover/insights" className="button button-secondary">
+            Wardrobe insights
+          </Link>
+          <Link href="/search" className="button button-quiet">
+            Start again
+          </Link>
+        </div>
       </div>
       <SearchForm key={filters} filters={filters} />
       {chosenFilters.length > 0 && (

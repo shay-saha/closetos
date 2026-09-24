@@ -102,7 +102,10 @@ export function Settings() {
         method: "PATCH",
         body: JSON.stringify({ ...preferences, version: profile.data?.version }),
       }),
-    onSuccess: (saved) => client.setQueryData(["profile"], saved),
+    onSuccess: async (saved) => {
+      client.setQueryData(["profile"], saved);
+      await client.invalidateQueries({ queryKey: ["search", "insights"] });
+    },
   });
   if (profile.isPending)
     return (
