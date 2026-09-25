@@ -61,6 +61,7 @@ async function prepare(page: Page) {
   return pieces;
 }
 async function usable(page: Page) {
+  await expect(page).toHaveTitle("CLOSET//OS — Your wardrobe, considered");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
