@@ -188,6 +188,11 @@ export function GarmentDetail({ id }: { id: string }) {
                   Find similar pieces
                 </Link>
               )}
+              {garment.processingStatus === "READY" && garment.status === "AVAILABLE" && (
+                <Link className="button button-secondary" href={`/garments/${id}/works-with`}>
+                  Works with this
+                </Link>
+              )}
               <Dialog.Root>
                 <Dialog.Trigger className="button button-danger">Delete piece</Dialog.Trigger>
                 <Dialog.Portal>

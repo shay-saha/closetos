@@ -381,6 +381,9 @@ export function WardrobeInsights() {
         </Link>
       </div>
       <div className="insight-tabs" aria-label="Insight views">
+        <Link href="/discover/duplicates" className="button button-quiet">
+          Potential duplicates
+        </Link>
         {(Object.entries(views) as [InsightView, string][]).map(([key, label]) => (
           <Button
             key={key}

@@ -24,6 +24,7 @@
   font-size: 0.875rem;
 }
 .insight-toolbar select,
+.insight-toolbar input:not([type="checkbox"]),
 .insight-currency select {
   min-height: 44px;
   padding: 0.5rem 0.75rem;
@@ -32,6 +33,44 @@
   background: var(--paper);
   color: var(--ink);
   font-size: 1rem;
+}
+.insight-toolbar input:not([type="checkbox"]) {
+  width: min(100%, 16rem);
+}
+.duplicate-pairs,
+.pairing-pieces {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1.5rem;
+  padding: 0;
+  margin-block: 2rem;
+}
+.duplicate-pairs > li,
+.pairing-pieces > li,
+.pairing-source {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: var(--surface);
+}
+.pairing-source {
+  max-width: 40rem;
+  margin-block: 2rem;
+}
+.recommendation-reasons summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+}
+.recommendation-reasons > ul {
+  color: var(--muted);
+  line-height: 1.65;
+  padding-left: 1.25rem;
+}
+.recommendation-reasons li {
+  margin-block: 0.5rem;
 }
 .insight-toolbar > .insight-checkbox {
   display: flex;

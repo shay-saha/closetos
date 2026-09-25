@@ -82,7 +82,10 @@ function StudioEditor({ initial, garmentId }: { initial?: Outfit; garmentId?: st
       client.setQueryData(["outfit", saved.id], saved);
       setVersion(saved.version);
       setDirty(false);
-      await client.invalidateQueries({ queryKey: ["outfits"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["outfits"] }),
+        client.invalidateQueries({ queryKey: ["search", "works-with"] }),
+      ]);
       if (!initial) router.replace(`/outfits/${saved.id}`);
     },
   });
@@ -93,14 +96,20 @@ function StudioEditor({ initial, garmentId }: { initial?: Outfit; garmentId?: st
         body: JSON.stringify({ version }),
       }),
     onSuccess: async (copy) => {
-      await client.invalidateQueries({ queryKey: ["outfits"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["outfits"] }),
+        client.invalidateQueries({ queryKey: ["search", "works-with"] }),
+      ]);
       router.push(`/outfits/${copy.id}`);
     },
   });
   const remove = useMutation({
     mutationFn: () => api<void>(`outfits/${initial?.id}?version=${version}`, { method: "DELETE" }),
     onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ["outfits"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["outfits"] }),
+        client.invalidateQueries({ queryKey: ["search", "works-with"] }),
+      ]);
       router.push("/outfits");
     },
   });
