@@ -11,6 +11,7 @@ import {
   Settings,
   Layers,
   Search,
+  Luggage,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "./ui/button";
@@ -21,6 +22,7 @@ const destinations = [
   { href: "/search", label: "Search", Icon: Search },
   { href: "/review", label: "Review", Icon: ListChecks },
   { href: "/outfits", label: "Outfits", Icon: Layers },
+  { href: "/packing", label: "Pack", Icon: Luggage },
 ];
 
 export function ClosetShell({ children }: { children: React.ReactNode }) {
@@ -42,6 +44,7 @@ export function ClosetShell({ children }: { children: React.ReactNode }) {
               aria-current={
                 path === href ||
                 (href === "/catalogue" && path.startsWith("/collections")) ||
+                (href === "/packing" && path.startsWith("/packing/")) ||
                 (href === "/search" && path.startsWith("/discover"))
                   ? "page"
                   : undefined

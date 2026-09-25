@@ -1,5 +1,238 @@
 @import "tailwindcss";
 
+.packing-page .page-intro h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  overflow-wrap: anywhere;
+}
+.packing-trip-fields,
+.packing-picker {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.packing-settings > summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+}
+.packing-generate {
+  margin-top: 1.5rem;
+}
+.packing-section {
+  border-top: 1px solid var(--line);
+  margin-top: 2rem;
+  padding-top: 2rem;
+}
+.packing-section > h2,
+.packing-section > h3 {
+  margin-bottom: 1rem;
+}
+.packing-section > p,
+.packing-picker > p {
+  max-width: 75ch;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-block: 1rem;
+}
+.packing-page .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.packing-page .form-grid > label,
+.packing-field,
+.packing-search {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.packing-page input:not([type="checkbox"]),
+.packing-page select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+}
+.packing-search {
+  max-width: 30rem;
+  margin-block: 1.25rem;
+}
+.packing-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-block: 1rem;
+}
+.packing-checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.packing-checkboxes input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.packing-occasion {
+  min-width: 0;
+  margin-block: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+.packing-occasion legend {
+  padding-inline: 0.5rem;
+}
+.packing-selection {
+  margin-block: 1rem;
+}
+.packing-selection ul,
+.packing-picker-pieces,
+.packing-capsule-pieces,
+.packing-trips {
+  padding: 0;
+  list-style: none;
+}
+.packing-selection li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.packing-picker-pieces > li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.packing-picker-pieces > li > .piece-art {
+  width: 52px;
+  height: 68px;
+  flex-shrink: 0;
+}
+.packing-picker-pieces > li > div:not(.packing-checkboxes) {
+  display: grid;
+  flex: 1 1 12rem;
+  min-width: 0;
+  gap: 0.4rem;
+  overflow-wrap: anywhere;
+}
+.packing-picker-pieces > li > div > span {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.packing-picker-pieces .manual-label,
+.packing-capsule-pieces .manual-label,
+.packing-outfits .manual-label {
+  display: none;
+}
+.packing-notice,
+.packing-warning {
+  padding: 1rem;
+  margin-block: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  line-height: 1.65;
+}
+.packing-warning .button {
+  margin-top: 0.75rem;
+}
+.packing-warnings,
+.packing-explanations ul {
+  padding-left: 1.25rem;
+  line-height: 1.65;
+  max-width: 80ch;
+}
+.packing-warnings li,
+.packing-explanations li {
+  margin-block: 0.5rem;
+}
+.packing-explanations summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+}
+.packing-count {
+  font-variant-numeric: tabular-nums;
+}
+.packing-capsule-pieces,
+.packing-trips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1.25rem;
+  margin-block: 1.5rem;
+}
+.packing-capsule-pieces > li,
+.packing-trips > li {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.packing-capsule-pieces > li > a {
+  display: grid;
+  gap: 1rem;
+}
+.packing-capsule-pieces .piece-art {
+  height: 160px;
+}
+.packing-capsule-pieces > li > .button {
+  align-self: end;
+}
+.packing-outfits {
+  display: grid;
+  gap: 1.5rem;
+  padding-left: 1.5rem;
+  margin-top: 1.5rem;
+}
+.packing-outfits > li > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin-top: 1rem;
+}
+.packing-outfits > li > ul > li {
+  width: 130px;
+  max-width: 100%;
+}
+.packing-outfits a {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+.packing-outfits .piece-art {
+  height: 120px;
+}
+.packing-trips h2 {
+  font-size: 1.75rem;
+  margin-bottom: 0.75rem;
+}
+.packing-trips p {
+  line-height: 1.6;
+  color: var(--muted);
+  margin-block: 0.75rem;
+}
+
 .insights-page .page-intro h1 {
   font-size: clamp(2.5rem, 5vw, 4rem);
 }

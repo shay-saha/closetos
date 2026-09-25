@@ -18,6 +18,7 @@ export function AddGarment() {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["garments"] }),
         client.invalidateQueries({ queryKey: ["search"] }),
+        client.invalidateQueries({ queryKey: ["packing"] }),
       ]);
       router.push(`/garments/${garment.id}`);
     },

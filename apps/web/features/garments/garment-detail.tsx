@@ -27,6 +27,7 @@ export function GarmentDetail({ id }: { id: string }) {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["garments"] }),
       client.invalidateQueries({ queryKey: ["search"] }),
+      client.invalidateQueries({ queryKey: ["packing"] }),
       client.invalidateQueries({ queryKey: ["garment", id] }),
     ]);
   };

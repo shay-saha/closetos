@@ -53,6 +53,7 @@ export function WearLog({ target }: { target: Target }) {
         client.invalidateQueries({ queryKey: ["garment"] }),
         client.invalidateQueries({ queryKey: ["garments"] }),
         client.invalidateQueries({ queryKey: ["search"] }),
+        client.invalidateQueries({ queryKey: ["packing"] }),
       ]);
     },
   });
@@ -133,6 +134,7 @@ export function WearHistory({ garmentId, outfitId }: { garmentId?: string; outfi
         client.invalidateQueries({ queryKey: ["garment"] }),
         client.invalidateQueries({ queryKey: ["garments"] }),
         client.invalidateQueries({ queryKey: ["search"] }),
+        client.invalidateQueries({ queryKey: ["packing"] }),
       ]);
     },
   });
