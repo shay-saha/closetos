@@ -13,6 +13,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.4"
+      - name: Verify infrastructure formatting, schema, and mocked AWS contracts
+        run: make test-infra
+
   media-worker:
     runs-on: ubuntu-latest
     timeout-minutes: 15

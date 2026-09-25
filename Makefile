@@ -1,4 +1,4 @@
-.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker format-api
+.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-infra format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
@@ -16,6 +16,9 @@ media-worker:
 
 test-worker:
 	./scripts/run-worker-tests.sh
+
+test-infra:
+	./scripts/run-infrastructure-tests.sh
 
 api:
 	./scripts/run-api.sh
