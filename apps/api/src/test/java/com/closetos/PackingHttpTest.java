@@ -84,6 +84,57 @@ class PackingHttpTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void tripDetailsResolveConstraintNamesAndKeepDeletedReferencesVisibleForRepair()
+            throws Exception {
+        String owner = "packing-constraint-references";
+        UUID required = piece(owner, "Required dress", "DRESS");
+        UUID excluded = piece(owner, "Excluded shoes", "SHOES");
+        piece("packing-constraint-references-foreign", "Private piece", "TOP");
+        var request = request("Constraint references");
+        var constraints = (ObjectNode) request.path("constraints");
+        constraints.putArray("requiredGarments").add(required.toString());
+        constraints.putArray("excludedGarments").add(excluded.toString());
+        constraints
+                .putArray("formalEvents")
+                .addObject()
+                .put("name", "Dinner")
+                .put("date", request.path("startDate").asText())
+                .put("formality", "Formal");
+        var list = create(owner, request);
+        assertThat(list.path("constraintPieces")).hasSize(2);
+        for (var reference : list.path("constraintPieces")) {
+            assertThat(reference.path("present").asBoolean()).isTrue();
+            assertThat(reference.path("name").asText()).isIn("Required dress", "Excluded shoes");
+            assertThat(reference.has("assets")).isFalse();
+        }
+        assertThat(list.path("schedule")).hasSize(2);
+        assertThat(list.path("schedule").get(0).path("index").asInt()).isZero();
+        assertThat(list.path("schedule").get(1).path("name").asText()).isEqualTo("Dinner");
+        assertThat(list.path("schedule").get(1).path("date").asText())
+                .isEqualTo(request.path("startDate").asText());
+        long version = read(owner, get("/api/v1/garments/" + required)).path("version").asLong();
+        mvc.perform(
+                        as(
+                                delete("/api/v1/garments/" + required)
+                                        .param("version", "" + version),
+                                owner))
+                .andExpect(status().isNoContent());
+        String path = ROOT + "/" + list.path("id").asText();
+        var current = read(owner, get(path));
+        assertThat(current.path("constraintPieces")).hasSize(2);
+        for (var reference : current.path("constraintPieces"))
+            if (reference.path("id").asText().equals(required.toString())) {
+                assertThat(reference.path("present").asBoolean()).isFalse();
+                assertThat(reference.path("name").isNull()).isTrue();
+            }
+        constraints.putArray("requiredGarments");
+        request.put("version", current.path("version").asLong());
+        var repaired = read(owner, patch(path).content(request.toString()));
+        assertThat(repaired.path("constraintPieces")).hasSize(1);
+        verifyNoInteractions(solver);
+    }
+
+    @Test
     void draftCrudUsesScopedPaginationAndRejectsStaleWrites() throws Exception {
         String owner = "packing-crud";
         var first = create(owner, request("First trip"));

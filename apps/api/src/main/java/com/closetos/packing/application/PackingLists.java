@@ -359,6 +359,26 @@ public class PackingLists {
                         .toList();
         boolean stale = stale(row, statuses, pieces);
         var presented = presenter.page(new GarmentPage(pieces, null)).items();
+        var references = new java.util.HashSet<>(row.trip().constraints().requiredGarments());
+        references.addAll(row.trip().constraints().excludedGarments());
+        var constrained =
+                garments.ownedDetails(new ArrayList<>(references)).stream()
+                        .collect(Collectors.toMap(GarmentDetails::id, Function.identity()));
+        var constraintPieces =
+                references.stream()
+                        .sorted(java.util.Comparator.comparing(UUID::toString))
+                        .map(
+                                id -> {
+                                    var piece = constrained.get(id);
+                                    return new PackingDetails.ConstraintPiece(
+                                            id,
+                                            piece == null ? null : piece.metadata().name(),
+                                            piece == null ? null : piece.metadata().category(),
+                                            piece == null ? null : piece.status(),
+                                            piece == null ? null : piece.processingStatus(),
+                                            piece != null);
+                                })
+                        .toList();
         return new PackingDetails(
                 row.id(),
                 row.trip(),
@@ -373,6 +393,8 @@ public class PackingLists {
                 presented.stream()
                         .map(piece -> new PackingDetails.Item(piece, statuses.get(piece.id())))
                         .toList(),
+                constraintPieces,
+                rules.demands(row.trip()),
                 row.createdAt(),
                 row.updatedAt());
     }

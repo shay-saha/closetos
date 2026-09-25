@@ -1,6 +1,9 @@
 package com.closetos.packing.api;
 
+import com.closetos.garment.api.GarmentCategory;
 import com.closetos.garment.api.GarmentDetails;
+import com.closetos.garment.api.GarmentStatus;
+import com.closetos.media.api.ProcessingStatus;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.time.Instant;
 import java.util.List;
@@ -15,9 +18,19 @@ public record PackingDetails(
         boolean stale,
         List<String> explanations,
         List<Item> items,
+        List<ConstraintPiece> constraintPieces,
+        List<PackingProblem.Demand> schedule,
         Instant createdAt,
         Instant updatedAt) {
     public record Item(GarmentDetails garment, ItemStatus status) {}
+
+    public record ConstraintPiece(
+            UUID id,
+            String name,
+            GarmentCategory category,
+            GarmentStatus status,
+            ProcessingStatus processingStatus,
+            boolean present) {}
 
     public enum ItemStatus {
         TO_PACK,

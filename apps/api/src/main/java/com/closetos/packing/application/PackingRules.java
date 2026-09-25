@@ -229,7 +229,7 @@ public class PackingRules {
                 || tags.stream().anyMatch(RecommendationWeather.RAIN::matches);
     }
 
-    private List<Demand> demands(PackingTrip trip) {
+    List<Demand> demands(PackingTrip trip) {
         var demands = new ArrayList<Demand>();
         int offset = 0;
         for (var occasion : trip.constraints().occasions())
