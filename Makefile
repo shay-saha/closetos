@@ -4,7 +4,7 @@ setup:
 	python3 scripts/prepare-local-env.py
 	pnpm install --frozen-lockfile
 	uv sync --project workers/media-processor --locked
-	uv run --project workers/media-processor python -m closetos_media download-embeddings
+	./scripts/prepare-local-models.sh
 
 dependencies:
 	docker compose up -d --wait
@@ -15,10 +15,7 @@ media-worker:
 	./scripts/run-media-worker.sh
 
 test-worker:
-	uv run --project workers/media-processor python -m closetos_media download-embeddings
-	uv run --project workers/media-processor ruff check workers/media-processor
-	uv run --project workers/media-processor ruff format --check workers/media-processor
-	EMBEDDING_EVALUATION=1 uv run --project workers/media-processor pytest workers/media-processor/tests
+	./scripts/run-worker-tests.sh
 
 api:
 	./scripts/run-api.sh
