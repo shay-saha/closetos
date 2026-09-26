@@ -48,9 +48,20 @@ logging:
     format:
       console: ecs
 closetos:
+  aws:
+    region: ${AWS_REGION:eu-west-2}
   media:
+    bucket: ${MEDIA_BUCKET:closetos}
+    workflow-mode: ${MEDIA_WORKFLOW_MODE:aws}
+    state-machine-arn: ${MEDIA_STATE_MACHINE_ARN:}
+    dispatch-enabled: ${MEDIA_DISPATCH_ENABLED:false}
+    aws-consumer-enabled: ${MEDIA_AWS_CONSUMER_ENABLED:false}
+    ingest-queue-url: ${MEDIA_INGEST_QUEUE_URL:}
+    result-queue-url: ${MEDIA_RESULT_QUEUE_URL:}
     cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
     cloudfront-key-id: ${CLOUDFRONT_KEY_ID:}
     cloudfront-private-key: ${CLOUDFRONT_PRIVATE_KEY:}
+  search:
+    dispatch-enabled: ${EMBEDDING_DISPATCH_ENABLED:false}
   auth:
     client-id: ${COGNITO_CLIENT_ID}

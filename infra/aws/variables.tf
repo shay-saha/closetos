@@ -86,3 +86,46 @@ variable "analysis_model_arns" {
     error_message = "Provide at most sixteen exact Bedrock model/profile ARNs without wildcards."
   }
 }
+variable "image_digests" {
+  type        = map(string)
+  default     = {}
+  description = "SHA-256 image digests in this environment's API, web, and media-worker ECR repositories. Leave empty to provision the foundation before building images."
+  validation {
+    condition     = length(var.image_digests) == 0 || (toset(keys(var.image_digests)) == toset(["api", "web", "media-worker"]) && alltrue([for digest in var.image_digests : can(regex("^sha256:[0-9a-f]{64}$", digest))]))
+    error_message = "Provide all three immutable sha256 image digests, or an empty map for initial provisioning."
+  }
+  validation {
+    condition     = length(var.image_digests) == 0 || (var.route53_zone_id != null && var.analysis_model_id != null)
+    error_message = "Runtime deployment requires the application's public Route 53 zone and a configured analysis model."
+  }
+}
+variable "services_enabled" {
+  type        = bool
+  default     = false
+  description = "Start API/web services only after secrets are initialized and database migrations succeed."
+}
+variable "route53_zone_id" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.route53_zone_id == null ? true : can(regex("^Z[A-Z0-9]+$", var.route53_zone_id))
+    error_message = "Provide a public Route 53 hosted zone ID."
+  }
+}
+variable "analysis_model_id" {
+  type        = string
+  default     = null
+  description = "Bedrock model/profile ARN supporting Converse with a strict tool schema. Include it and underlying cross-region models in analysis_model_arns."
+  validation {
+    condition     = var.analysis_model_id == null ? true : contains(var.analysis_model_arns, var.analysis_model_id)
+    error_message = "The configured analysis model/profile must be explicitly permitted in analysis_model_arns."
+  }
+}
+variable "maximum_service_tasks" {
+  type    = number
+  default = 4
+  validation {
+    condition     = var.maximum_service_tasks >= 2 && var.maximum_service_tasks <= 8 && floor(var.maximum_service_tasks) == var.maximum_service_tasks
+    error_message = "Limit application scaling to 2–8 tasks per service."
+  }
+}

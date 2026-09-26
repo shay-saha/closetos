@@ -199,6 +199,12 @@ resource "aws_iam_role_policy" "workflow" {
         Effect   = "Allow"
         Action   = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery", "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:PutResourcePolicy", "logs:DescribeResourcePolicies", "logs:DescribeLogGroups"]
         Resource = "*"
+      },
+      {
+        Sid      = "TraceMediaWorkflow"
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+        Resource = "*"
       }
     ]
   })

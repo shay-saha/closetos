@@ -13,3 +13,9 @@ output "result_queue_url" { value = aws_sqs_queue.media["media-results"].url }
 output "application_secret_arns" { value = { for name, secret in aws_secretsmanager_secret.application : name => secret.arn } }
 output "task_role_arns" { value = { for name, role in aws_iam_role.task : name => role.arn } }
 output "execution_role_arns" { value = { for name, role in aws_iam_role.execution : name => role.arn } }
+output "ecs_cluster_arn" { value = aws_ecs_cluster.application.arn }
+output "service_names" { value = { for name, service in aws_ecs_service.application : name => service.name } }
+output "service_task_definitions" { value = { for name, task in aws_ecs_task_definition.service : name => task.arn } }
+output "processing_state_machine_arn" { value = one(aws_sfn_state_machine.media[*].arn) }
+output "application_url" { value = local.runtime_enabled ? local.origin : null }
+output "processing_workflow_definition" { value = one([for machine in aws_sfn_state_machine.media : jsondecode(machine.definition)]) }
