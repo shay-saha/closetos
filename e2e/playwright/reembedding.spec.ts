@@ -22,9 +22,14 @@ test("ordinary accounts cannot rebuild search and an administrator can retry and
   for (const piece of pieces)
     await expect
       .poll(
-        async () =>
-          (await (await page.request.get(`/api/backend/garments/${piece.id}/embedding`)).json())
-            .state,
+        async () => {
+          const response = await page.request.get(`/api/backend/garments/${piece.id}/embedding`);
+          expect(response.status()).toBe(200);
+          const result = await response.json();
+          expect(result.state, result.failureCode).not.toBe("FAILED");
+          return result.state;
+        },
+        { timeout: 60_000, intervals: [500, 1000] },
       )
       .toBe("READY");
   const previous = await Promise.all(
