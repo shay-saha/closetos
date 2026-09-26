@@ -17,23 +17,25 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 @Component
 class S3ObjectStorage implements ObjectStoragePort {
     private final S3Client s3;
     private final S3Presigner signer;
+    private final MediaDownloadSigner downloadSigner;
     private final Clock clock;
     private final String bucket;
 
     S3ObjectStorage(
             S3Client s3,
             S3Presigner signer,
+            MediaDownloadSigner downloadSigner,
             Clock clock,
             @Value("${closetos.media.bucket:closetos}") String bucket) {
         this.s3 = s3;
         this.signer = signer;
+        this.downloadSigner = downloadSigner;
         this.clock = clock;
         this.bucket = bucket;
     }
@@ -68,14 +70,7 @@ class S3ObjectStorage implements ObjectStoragePort {
 
     @Override
     public String signDownload(String key, Instant expiresAt) {
-        return signer.presignGetObject(
-                        GetObjectPresignRequest.builder()
-                                .signatureDuration(Duration.between(clock.instant(), expiresAt))
-                                .getObjectRequest(
-                                        GetObjectRequest.builder().bucket(bucket).key(key).build())
-                                .build())
-                .url()
-                .toString();
+        return downloadSigner.sign(key, expiresAt);
     }
 
     @Override

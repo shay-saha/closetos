@@ -13,6 +13,7 @@ closetos:
     worker-token: ${MEDIA_WORKER_TOKEN}
     dispatch-enabled: true
   media:
+    delivery-mode: s3
     storage-mode: local
     endpoint: http://localhost:9000
     bucket: closetos

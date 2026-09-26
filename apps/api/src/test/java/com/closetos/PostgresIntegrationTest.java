@@ -13,7 +13,8 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest(
         properties = {
             "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://issuer.example.test",
-            "closetos.auth.client-id=closetos-test"
+            "closetos.auth.client-id=closetos-test",
+            "closetos.media.delivery-mode=s3"
         })
 @Import(PostgresIntegrationTest.DatabaseConfiguration.class)
 public abstract class PostgresIntegrationTest {

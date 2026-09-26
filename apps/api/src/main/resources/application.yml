@@ -48,5 +48,9 @@ logging:
     format:
       console: ecs
 closetos:
+  media:
+    cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
+    cloudfront-key-id: ${CLOUDFRONT_KEY_ID:}
+    cloudfront-private-key: ${CLOUDFRONT_PRIVATE_KEY:}
   auth:
     client-id: ${COGNITO_CLIENT_ID}
