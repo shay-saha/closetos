@@ -10,3 +10,4 @@ output "oidc_client_id" { value = aws_cognito_user_pool_client.web.id }
 output "container_repositories" { value = { for name, repo in aws_ecr_repository.application : name => repo.repository_url } }
 output "ingest_queue_url" { value = aws_sqs_queue.media["media-ingest"].url }
 output "result_queue_url" { value = aws_sqs_queue.media["media-results"].url }
+output "application_secret_arns" { value = { for name, secret in aws_secretsmanager_secret.application : name => secret.arn } }

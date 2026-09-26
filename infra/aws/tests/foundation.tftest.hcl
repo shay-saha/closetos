@@ -126,10 +126,15 @@ run "development_security_and_cost_boundaries" {
     condition     = alltrue([for repo in aws_ecr_repository.application : repo.image_tag_mutability == "IMMUTABLE" && repo.image_scanning_configuration[0].scan_on_push && !repo.force_delete])
     error_message = "Released images must remain immutable, scanned, and available for rollback."
   }
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret.application)) == toset(["web-session", "media-signing"]) && alltrue([for secret in aws_secretsmanager_secret.application : secret.recovery_window_in_days == 30])
+    error_message = "Keep session and signing secrets separate and recoverable; supply values outside Terraform."
+  }
 }
 
 run "production_redundancy_and_recovery" {
-  command = apply
+  command   = apply
+  state_key = "production"
   variables { environment = "prod" }
   assert {
     condition     = length(aws_nat_gateway.main) == 2 && aws_db_instance.main.multi_az && aws_db_instance.main.backup_retention_period == 14
