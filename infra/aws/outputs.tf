@@ -11,3 +11,5 @@ output "container_repositories" { value = { for name, repo in aws_ecr_repository
 output "ingest_queue_url" { value = aws_sqs_queue.media["media-ingest"].url }
 output "result_queue_url" { value = aws_sqs_queue.media["media-results"].url }
 output "application_secret_arns" { value = { for name, secret in aws_secretsmanager_secret.application : name => secret.arn } }
+output "task_role_arns" { value = { for name, role in aws_iam_role.task : name => role.arn } }
+output "execution_role_arns" { value = { for name, role in aws_iam_role.execution : name => role.arn } }

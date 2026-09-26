@@ -69,3 +69,20 @@ variable "log_retention_days" {
     error_message = "Choose a supported retention period of 7–365 days."
   }
 }
+variable "embedding_model_arn" {
+  type        = string
+  description = "Regional Titan multimodal embedding model ARN; model access must be enabled in that region."
+  validation {
+    condition     = can(regex("^arn:aws(-[a-z]+)?:bedrock:[a-z0-9-]+::foundation-model/amazon\\.titan-embed-image-v1$", var.embedding_model_arn))
+    error_message = "Provide the regional Amazon Titan multimodal embedding foundation-model ARN."
+  }
+}
+variable "analysis_model_arns" {
+  type        = set(string)
+  default     = []
+  description = "Exact Bedrock analysis/profile and underlying regional model ARNs to permit."
+  validation {
+    condition     = length(var.analysis_model_arns) <= 16 && alltrue([for arn in var.analysis_model_arns : can(regex("^arn:aws(-[a-z]+)?:bedrock:[a-z0-9-]+:([0-9]{12})?:(foundation-model|inference-profile|application-inference-profile)/[A-Za-z0-9._:/-]+$", arn))])
+    error_message = "Provide at most sixteen exact Bedrock model/profile ARNs without wildcards."
+  }
+}

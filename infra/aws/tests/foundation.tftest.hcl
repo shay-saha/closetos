@@ -62,6 +62,7 @@ override_resource {
 variables {
   app_domain            = "closet.example.test"
   cloudfront_public_key = file("tests/media-signing.pub")
+  embedding_model_arn   = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-image-v1"
 }
 
 run "development_security_and_cost_boundaries" {
@@ -144,6 +145,63 @@ run "production_redundancy_and_recovery" {
     condition     = aws_db_instance.main.max_allocated_storage == 100 && !aws_db_instance.main.apply_immediately && !aws_db_instance.main.allow_major_version_upgrade
     error_message = "Bound storage costs and apply database maintenance without surprise major upgrades."
   }
+}
+
+run "least_privilege_service_and_workflow_roles" {
+  command   = apply
+  state_key = "permissions"
+  variables {
+    analysis_model_arns = [
+      "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.amazon.nova-lite-v1:0"
+    ]
+  }
+  assert {
+    condition     = toset(keys(aws_iam_role.task)) == toset(["api", "web", "media-worker"]) && alltrue([for role in aws_iam_role.task : jsondecode(role.assume_role_policy).Statement[0].Principal.Service == "ecs-tasks.amazonaws.com" && jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"] == "123456789012" && jsondecode(role.assume_role_policy).Statement[0].Condition.ArnLike["aws:SourceArn"] == "arn:aws:ecs:eu-west-2:123456789012:*"])
+    error_message = "Use distinct application task roles with account-scoped ECS trust."
+  }
+  assert {
+    condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Action])) == toset([
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "states:StartExecution",
+      "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "kms:Decrypt", "bedrock:InvokeModel"
+    ]) && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["InvokeEmbeddingModel"] == var.embedding_model_arn
+    error_message = "The API may manage wardrobe objects, consume processing events, and invoke its embedding model without administrator or queue publishing permissions."
+  }
+  assert {
+    condition     = { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement }["ListOwnedMediaForDeletion"].Condition.StringLike["s3:prefix"] == "users/*/garments/*/images/*/" && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["OwnedWardrobeMedia"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/*"
+    error_message = "Media listing and access must stay inside wardrobe image prefixes."
+  }
+  assert {
+    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Action])) == toset(["s3:GetObject", "s3:PutObject", "bedrock:InvokeModel"]) && { for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Sid => statement.Resource }["WriteVersionedProcessingOutput"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/pipelines/*/*" && toset({ for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Sid => statement.Resource }["InvokeConfiguredAnalysisModels"]) == var.analysis_model_arns
+    error_message = "Workers may write only versioned results and invoke configured analysis models; they may not delete media or access domain storage and secrets."
+  }
+  assert {
+    condition     = toset({ for statement in jsondecode(aws_iam_role_policy.execution["api"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.application["media-signing"].arn]) && toset({ for statement in jsondecode(aws_iam_role_policy.execution["web"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_secretsmanager_secret.application["web-session"].arn]) && !contains([for statement in jsondecode(aws_iam_role_policy.execution["media-worker"].policy).Statement : statement.Sid], "ReadStartupSecrets")
+    error_message = "Container execution roles may load only their own startup secrets; the media worker needs none."
+  }
+  assert {
+    condition     = alltrue([for name, policy in aws_iam_role_policy.execution : { for statement in jsondecode(policy.policy).Statement : statement.Sid => statement.Resource }["ReadOwnContainerImage"] == aws_ecr_repository.application[name].arn && { for statement in jsondecode(policy.policy).Statement : statement.Sid => statement.Resource }["WriteOwnContainerLogs"] == "arn:aws:logs:eu-west-2:123456789012:log-group:/ecs/closetos-dev/${name}:log-stream:*"])
+    error_message = "Each execution role may pull and log only its own container."
+  }
+  assert {
+    condition     = toset({ for statement in jsondecode(aws_iam_role_policy.workflow.policy).Statement : statement.Sid => statement.Resource }["PassWorkerRolesOnly"]) == toset([aws_iam_role.task["media-worker"].arn, aws_iam_role.execution["media-worker"].arn]) && { for statement in jsondecode(aws_iam_role_policy.workflow.policy).Statement : statement.Sid => statement }["PassWorkerRolesOnly"].Condition.StringEquals["iam:PassedToService"] == "ecs-tasks.amazonaws.com" && { for statement in jsondecode(aws_iam_role_policy.workflow.policy).Statement : statement.Sid => statement }["RunMediaTask"].Condition.ArnEquals["ecs:cluster"] == local.cluster_arn && { for statement in jsondecode(aws_iam_role_policy.workflow.policy).Statement : statement.Sid => statement.Resource }["PublishProcessingResults"] == aws_sqs_queue.media["media-results"].arn
+    error_message = "The workflow must use only media worker roles, this ECS cluster, and its results queue."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role.workflow.assume_role_policy).Statement[0].Principal.Service == "states.amazonaws.com" && jsondecode(aws_iam_role.workflow.assume_role_policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == local.workflow_arn
+    error_message = "Only this account's media state machine may assume the workflow role."
+  }
+}
+
+run "reject_wildcard_embedding_models" {
+  command = plan
+  variables { embedding_model_arn = "arn:aws:bedrock:us-east-1::foundation-model/*" }
+  expect_failures = [var.embedding_model_arn]
+}
+run "reject_wildcard_analysis_models" {
+  command = plan
+  variables { analysis_model_arns = ["arn:aws:bedrock:us-east-1::foundation-model/*"] }
+  expect_failures = [var.analysis_model_arns]
 }
 
 run "reject_private_signing_material" {
