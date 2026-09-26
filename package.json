@@ -8,12 +8,13 @@
     "test": "pnpm --filter @closetos/web test",
     "build": "pnpm --filter @closetos/web build",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
-    "format": "prettier --write apps/web e2e .github package.json pnpm-workspace.yaml docker-compose.yml .prettierrc.json",
-    "format:check": "prettier --check apps/web e2e .github package.json pnpm-workspace.yaml docker-compose.yml .prettierrc.json"
+    "format": "prettier --write apps/web e2e .github scripts/*.mjs package.json pnpm-workspace.yaml docker-compose.yml .prettierrc.json",
+    "format:check": "prettier --check apps/web e2e .github scripts/*.mjs package.json pnpm-workspace.yaml docker-compose.yml .prettierrc.json"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
+    "asl-validator": "4.0.0",
     "prettier": "^3.9.9"
   }
 }

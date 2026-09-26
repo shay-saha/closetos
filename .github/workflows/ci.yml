@@ -18,6 +18,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter closetos
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.16.4"
