@@ -13,6 +13,7 @@ variables {
   app_domain            = "closet.example.test"
   cloudfront_public_key = file("tests/media-signing.pub")
   embedding_model_arn   = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-image-v1"
+  budget_alert_emails   = ["operator@example.test"]
 }
 
 run "development_security_and_cost_boundaries" {
@@ -172,4 +173,48 @@ run "reject_invalid_environment" {
   command = plan
   variables { environment = "experimental" }
   expect_failures = [var.environment]
+}
+
+run "account_spend_alerts_cover_every_region_and_service" {
+  command = apply
+  variables {
+    monthly_budget_usd  = 125.50
+    budget_alert_emails = ["owner@example.test", "operator@example.test"]
+  }
+  assert {
+    condition     = aws_budgets_budget.account_spend.account_id == "123456789012" && aws_budgets_budget.account_spend.budget_type == "COST" && aws_budgets_budget.account_spend.limit_amount == "125.5" && aws_budgets_budget.account_spend.limit_unit == "USD" && aws_budgets_budget.account_spend.time_unit == "MONTHLY"
+    error_message = "Configure the requested monthly USD spend alert for this account."
+  }
+  assert {
+    condition     = length(aws_budgets_budget.account_spend.cost_filter) == 0 && !one(aws_budgets_budget.account_spend.cost_types).include_credit && !one(aws_budgets_budget.account_spend.cost_types).include_refund && one(aws_budgets_budget.account_spend.cost_types).include_tax && one(aws_budgets_budget.account_spend.cost_types).include_support && one(aws_budgets_budget.account_spend.cost_types).use_amortized
+    error_message = "Count spend across all services and regions without depending on cost allocation tags or hiding costs behind credits/refunds."
+  }
+  assert {
+    condition     = toset([for notification in aws_budgets_budget.account_spend.notification : "${notification.notification_type}:${notification.threshold}"]) == toset(["ACTUAL:80", "ACTUAL:100", "FORECASTED:100"]) && alltrue([for notification in aws_budgets_budget.account_spend.notification : notification.comparison_operator == "GREATER_THAN" && notification.threshold_type == "PERCENTAGE" && notification.subscriber_email_addresses == var.budget_alert_emails])
+    error_message = "Alert both operators when actual spend passes 80/100 percent or forecasted spend passes the limit."
+  }
+}
+
+run "reject_missing_budget_recipients" {
+  command = plan
+  variables { budget_alert_emails = [] }
+  expect_failures = [var.budget_alert_emails]
+}
+
+run "reject_invalid_budget_recipients" {
+  command = plan
+  variables { budget_alert_emails = ["invalid-address"] }
+  expect_failures = [var.budget_alert_emails]
+}
+
+run "reject_unbounded_budget" {
+  command = plan
+  variables { monthly_budget_usd = 10001 }
+  expect_failures = [var.monthly_budget_usd]
+}
+
+run "reject_invalid_budget_amount" {
+  command = plan
+  variables { monthly_budget_usd = 0 }
+  expect_failures = [var.monthly_budget_usd]
 }

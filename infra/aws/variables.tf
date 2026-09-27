@@ -129,3 +129,22 @@ variable "maximum_service_tasks" {
     error_message = "Limit application scaling to 2–8 tasks per service."
   }
 }
+
+variable "monthly_budget_usd" {
+  type        = number
+  default     = 100
+  description = "Monthly account-wide spend alert threshold in USD, including Bedrock calls in other regions."
+  validation {
+    condition     = var.monthly_budget_usd >= 1 && var.monthly_budget_usd <= 10000 && floor(var.monthly_budget_usd * 100) == var.monthly_budget_usd * 100
+    error_message = "Set a monthly alert threshold from 1 to 10,000 USD, with at most two decimal places."
+  }
+}
+
+variable "budget_alert_emails" {
+  type        = set(string)
+  description = "One to ten verified operator email addresses for account-wide actual and forecasted spend alerts."
+  validation {
+    condition     = length(var.budget_alert_emails) >= 1 && length(var.budget_alert_emails) <= 10 && alltrue([for email in var.budget_alert_emails : length(email) <= 254 && can(regex("^[^ @]+@[^ @]+\\.[^ @]+$", email))])
+    error_message = "Provide one to ten valid operator email addresses so spending alerts have recipients."
+  }
+}

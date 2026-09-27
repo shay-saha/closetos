@@ -42,6 +42,7 @@ variables {
   app_domain            = "closet.example.test"
   cloudfront_public_key = file("tests/media-signing.pub")
   embedding_model_arn   = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-image-v1"
+  budget_alert_emails   = ["operator@example.test"]
   analysis_model_id     = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
   analysis_model_arns   = ["arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"]
   route53_zone_id       = "ZEXAMPLE123"

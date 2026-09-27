@@ -20,4 +20,5 @@ output "migration_task_definition_arn" { value = one(aws_ecs_task_definition.mig
 output "migration_network" { value = { subnets = [for subnet in aws_subnet.application : subnet.id], security_groups = [aws_security_group.service["api"].id], assign_public_ip = false } }
 output "processing_state_machine_arn" { value = one(aws_sfn_state_machine.media[*].arn) }
 output "application_url" { value = local.runtime_enabled ? local.origin : null }
+output "account_budget_name" { value = aws_budgets_budget.account_spend.name }
 output "processing_workflow_definition" { value = one([for machine in aws_sfn_state_machine.media : jsondecode(machine.definition)]) }
