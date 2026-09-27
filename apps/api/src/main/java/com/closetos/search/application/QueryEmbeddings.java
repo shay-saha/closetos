@@ -1,5 +1,7 @@
 package com.closetos.search.application;
 
+import com.closetos.platform.api.ExpensiveAction;
+import com.closetos.platform.api.ExpensiveActionLimits;
 import com.closetos.search.api.EmbeddingProviderPort;
 import com.closetos.search.api.EmbeddingProviderPort.Input;
 import com.closetos.search.api.EmbeddingProviderPort.ModelInfo;
@@ -22,12 +24,18 @@ public class QueryEmbeddings {
     private final EmbeddingProviderPort provider;
     private final JsonMapper json;
     private final Clock clock;
+    private final ExpensiveActionLimits limits;
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<>(32, .75f, true);
 
-    public QueryEmbeddings(EmbeddingProviderPort provider, JsonMapper json, Clock clock) {
+    public QueryEmbeddings(
+            EmbeddingProviderPort provider,
+            JsonMapper json,
+            Clock clock,
+            ExpensiveActionLimits limits) {
         this.provider = provider;
         this.json = json;
         this.clock = clock;
+        this.limits = limits;
     }
 
     public VectorResult embed(UUID wardrobe, Input input, ModelInfo model) {
@@ -46,6 +54,7 @@ public class QueryEmbeddings {
         }
         if (generate) {
             try {
+                limits.consume(wardrobe, ExpensiveAction.SEMANTIC_QUERY);
                 entry.result().complete(provider.embed(input, model));
             } catch (RuntimeException exception) {
                 entry.result().completeExceptionally(exception);

@@ -43,6 +43,7 @@ export function WardrobeSearch() {
   const sourcePending =
     query.error instanceof ApiError && query.error.code === "SEARCH_SOURCE_PENDING";
   const unavailable = query.error instanceof ApiError && query.error.status === 503;
+  const limited = query.error instanceof ApiError && query.error.code === "ACTION_LIMIT";
   return (
     <div className="page">
       <div className="page-intro">
@@ -119,7 +120,7 @@ export function WardrobeSearch() {
             </p>
           )}
           <ErrorState error={query.error} retry={query.refetch} />
-          {unavailable &&
+          {(unavailable || limited) &&
             !params.has("photo") &&
             !params.has("similarToGarmentId") &&
             params.has("q") && (

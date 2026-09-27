@@ -8,6 +8,8 @@ import com.closetos.media.api.MediaAssets;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.UploadRequest;
 import com.closetos.platform.api.DomainException;
+import com.closetos.platform.api.ExpensiveAction;
+import com.closetos.platform.api.ExpensiveActionLimits;
 import com.closetos.platform.api.OutboxAccess;
 import java.time.Clock;
 import java.time.Duration;
@@ -33,6 +35,7 @@ public class MediaService implements MediaAccess {
     private final ObjectStoragePort storage;
     private final JsonMapper json;
     private final Clock clock;
+    private final ExpensiveActionLimits limits;
 
     public MediaService(
             JdbcClient jdbc,
@@ -40,13 +43,15 @@ public class MediaService implements MediaAccess {
             OutboxAccess outbox,
             ObjectStoragePort storage,
             JsonMapper json,
-            Clock clock) {
+            Clock clock,
+            ExpensiveActionLimits limits) {
         this.jdbc = jdbc;
         this.policy = policy;
         this.outbox = outbox;
         this.storage = storage;
         this.json = json;
         this.clock = clock;
+        this.limits = limits;
     }
 
     @Override
@@ -75,6 +80,7 @@ public class MediaService implements MediaAccess {
                         + image
                         + "/original."
                         + policy.extension(request);
+        limits.consume(wardrobe, ExpensiveAction.PHOTO_UPLOAD);
         jdbc.sql(
                         """
                 INSERT INTO garment_image (id, garment_id, wardrobe_id, user_id, image_role, original_filename,

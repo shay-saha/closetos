@@ -1,5 +1,7 @@
 package com.closetos.search.application;
 
+import com.closetos.platform.api.ExpensiveAction;
+import com.closetos.platform.api.ExpensiveActionLimits;
 import com.closetos.platform.api.OutboxEntry;
 import com.closetos.search.api.EmbeddingProviderPort.ModelInfo;
 import com.closetos.search.api.EmbeddingProviderPort.VectorResult;
@@ -19,18 +21,21 @@ public class EmbeddingWorkRegistry {
     private final EmbeddingInputLoader inputs;
     private final EmbeddingModels models;
     private final ReembeddingJobTracker jobs;
+    private final ExpensiveActionLimits limits;
 
     public EmbeddingWorkRegistry(
             JdbcClient jdbc,
             Clock clock,
             EmbeddingInputLoader inputs,
             EmbeddingModels models,
-            ReembeddingJobTracker jobs) {
+            ReembeddingJobTracker jobs,
+            ExpensiveActionLimits limits) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.inputs = inputs;
         this.models = models;
         this.jobs = jobs;
+        this.limits = limits;
     }
 
     @Transactional
@@ -67,6 +72,7 @@ public class EmbeddingWorkRegistry {
                         .query(Integer.class)
                         .single();
         if (busy > 0) throw new Busy();
+        limits.consume(material.wardrobeId(), ExpensiveAction.GARMENT_EMBEDDING);
         jdbc.sql(
                         """
                 INSERT INTO garment_embedding_work(garment_id, wardrobe_id, model_key, source_fingerprint, state,

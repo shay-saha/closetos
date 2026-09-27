@@ -7,6 +7,8 @@ import com.closetos.media.api.ProcessingResult;
 import com.closetos.media.api.ProcessingStatus;
 import com.closetos.media.api.WorkflowJob;
 import com.closetos.platform.api.DomainException;
+import com.closetos.platform.api.ExpensiveAction;
+import com.closetos.platform.api.ExpensiveActionLimits;
 import com.closetos.platform.api.OutboxAccess;
 import java.util.Map;
 import java.util.Optional;
@@ -23,13 +25,19 @@ public class ProcessingRegistry implements ProcessingAccess {
     private final MediaAccess media;
     private final OutboxAccess outbox;
     private final JsonMapper json;
+    private final ExpensiveActionLimits limits;
 
     public ProcessingRegistry(
-            JdbcClient jdbc, MediaAccess media, OutboxAccess outbox, JsonMapper json) {
+            JdbcClient jdbc,
+            MediaAccess media,
+            OutboxAccess outbox,
+            JsonMapper json,
+            ExpensiveActionLimits limits) {
         this.jdbc = jdbc;
         this.media = media;
         this.outbox = outbox;
         this.json = json;
+        this.limits = limits;
     }
 
     @Override
@@ -51,6 +59,7 @@ public class ProcessingRegistry implements ProcessingAccess {
         var status = snapshot(id, wardrobe);
         if (!status.canRetry())
             throw DomainException.invalid("This photograph cannot be retried right now.");
+        limits.consume(wardrobe, ExpensiveAction.PROCESSING_RETRY);
         setState(id, ProcessingStatus.UPLOADED);
         return createJob(image, status.attemptCount() + 1);
     }

@@ -1,5 +1,6 @@
 package com.closetos.platform.infrastructure;
 
+import com.closetos.platform.api.ActionLimitExceeded;
 import com.closetos.platform.api.DomainException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -32,7 +33,13 @@ class ProblemHandler {
 
     @ExceptionHandler(DomainException.class)
     ResponseEntity<ProblemDetail> domain(DomainException exception, HttpServletRequest request) {
-        return problem(exception.status(), exception.code(), exception.getMessage(), request);
+        var response =
+                problem(exception.status(), exception.code(), exception.getMessage(), request);
+        if (exception instanceof ActionLimitExceeded limit)
+            return ResponseEntity.status(429)
+                    .header("Retry-After", Long.toString(limit.retryAfter().toSeconds()))
+                    .body(response.getBody());
+        return response;
     }
 
     @ExceptionHandler({

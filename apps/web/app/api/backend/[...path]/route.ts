@@ -51,6 +51,9 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
         ...(response.headers.has("x-request-id")
           ? { "X-Request-Id": response.headers.get("x-request-id")! }
           : {}),
+        ...(response.headers.has("retry-after")
+          ? { "Retry-After": response.headers.get("retry-after")! }
+          : {}),
       },
     });
     return refreshed ? persistRefreshedSession(request, result, token) : result;

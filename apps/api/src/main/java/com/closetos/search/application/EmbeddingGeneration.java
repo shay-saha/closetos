@@ -1,5 +1,6 @@
 package com.closetos.search.application;
 
+import com.closetos.platform.api.ActionLimitExceeded;
 import com.closetos.platform.api.DomainException;
 import com.closetos.platform.api.OutboxEntry;
 import com.closetos.platform.api.OutboxQueue;
@@ -71,6 +72,8 @@ public class EmbeddingGeneration {
             else queue.defer(event, Duration.ofSeconds(1));
         } catch (EmbeddingWorkRegistry.Busy exception) {
             queue.defer(event, Duration.ofSeconds(5));
+        } catch (ActionLimitExceeded exception) {
+            queue.defer(event, exception.retryAfter());
         } catch (RuntimeException exception) {
             boolean terminal =
                     event.publishAttempts() >= 5
