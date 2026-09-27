@@ -1,6 +1,15 @@
 mock_provider "aws" { source = "./tests" }
 
 override_resource {
+  target = aws_iam_role.migration_task
+  values = { arn = "arn:aws:iam::123456789012:role/migration-task" }
+}
+override_resource {
+  target = aws_iam_role.migration_execution
+  values = { arn = "arn:aws:iam::123456789012:role/migration-execution" }
+}
+
+override_resource {
   target = aws_iam_role.task["api"]
   values = { arn = "arn:aws:iam::123456789012:role/api-task" }
 }
@@ -45,6 +54,14 @@ variables {
 
 run "runtime_preparation_keeps_services_stopped" {
   command = apply
+  assert {
+    condition     = length(aws_ecs_task_definition.migration) == 1 && aws_ecs_task_definition.migration[0].task_role_arn == aws_iam_role.migration_task.arn && aws_ecs_task_definition.migration[0].execution_role_arn == aws_iam_role.migration_execution.arn && jsondecode(aws_ecs_task_definition.migration[0].container_definitions)[0].image == "${aws_ecr_repository.application["api"].repository_url}@${var.image_digests["api"]}" && jsondecode(aws_ecs_task_definition.migration[0].container_definitions)[0].entryPoint == ["java"] && contains(jsondecode(aws_ecs_task_definition.migration[0].container_definitions)[0].command, "-Dloader.main=com.closetos.platform.infrastructure.DatabaseMigration") && jsondecode(aws_ecs_task_definition.migration[0].container_definitions)[0].readonlyRootFilesystem && length(jsondecode(aws_ecs_task_definition.migration[0].container_definitions)[0].secrets) == 1
+    error_message = "Prepare a standalone migration task from the exact API image, with private startup credentials and separate roles."
+  }
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.migration_execution.policy).Statement) == 4 && jsondecode(aws_iam_role_policy.migration_execution.policy).Statement[3].Resource == aws_db_instance.main.master_user_secret[0].secret_arn && alltrue([for statement in jsondecode(aws_iam_role_policy.migration_execution.policy).Statement : !contains(statement.Action, "s3:GetObject") && !contains(statement.Action, "bedrock:InvokeModel")])
+    error_message = "Migration startup must not read application session/signing secrets, garment media, or invoke models."
+  }
   assert {
     condition     = toset(keys(aws_ecs_service.application)) == toset(["api", "web"]) && alltrue([for service in aws_ecs_service.application : service.desired_count == 0]) && length(aws_appautoscaling_target.application) == 0
     error_message = "Prepare real task definitions without starting services or scaling before migrations and secret initialization."

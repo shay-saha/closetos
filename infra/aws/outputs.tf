@@ -16,6 +16,8 @@ output "execution_role_arns" { value = { for name, role in aws_iam_role.executio
 output "ecs_cluster_arn" { value = aws_ecs_cluster.application.arn }
 output "service_names" { value = { for name, service in aws_ecs_service.application : name => service.name } }
 output "service_task_definitions" { value = { for name, task in aws_ecs_task_definition.service : name => task.arn } }
+output "migration_task_definition_arn" { value = one(aws_ecs_task_definition.migration[*].arn) }
+output "migration_network" { value = { subnets = [for subnet in aws_subnet.application : subnet.id], security_groups = [aws_security_group.service["api"].id], assign_public_ip = false } }
 output "processing_state_machine_arn" { value = one(aws_sfn_state_machine.media[*].arn) }
 output "application_url" { value = local.runtime_enabled ? local.origin : null }
 output "processing_workflow_definition" { value = one([for machine in aws_sfn_state_machine.media : jsondecode(machine.definition)]) }

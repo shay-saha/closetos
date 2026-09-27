@@ -90,7 +90,7 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -115,6 +115,8 @@ jobs:
       - run: uv run --project workers/media-processor python scripts/prepare-local-storage.py
       - name: Verify native media processing in the read-only worker container
         run: make test-worker-container
+      - name: Verify standalone migrations from the packaged API image
+        run: make test-migration-container
       - name: Start local media worker
         run: |
           ./scripts/prepare-local-models.sh
