@@ -54,6 +54,7 @@ locals {
     BEDROCK_EMBEDDING_MODEL_ID                         = var.embedding_model_arn
     BEDROCK_EMBEDDING_REGION                           = split(":", var.embedding_model_arn)[3]
     EMBEDDING_DISPATCH_ENABLED                         = "true"
+    EMBEDDING_PROVIDER                                 = "bedrock"
     SPRING_FLYWAY_ENABLED                              = "false"
     MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE = "readinessState,db"
     SERVER_FORWARD_HEADERS_STRATEGY                    = "framework"

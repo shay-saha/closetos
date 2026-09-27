@@ -59,6 +59,10 @@ run "development_runtime_contract" {
   command = apply
   variables { services_enabled = true }
   assert {
+    condition     = { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["EMBEDDING_PROVIDER"] == "bedrock" && { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["BEDROCK_EMBEDDING_MODEL_ID"] == var.embedding_model_arn && { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["BEDROCK_EMBEDDING_REGION"] == "us-east-1"
+    error_message = "Use direct Bedrock embeddings with the permitted model and its region, without a permanent worker service."
+  }
+  assert {
     condition     = alltrue([for service in aws_ecs_service.application : service.launch_type == "FARGATE" && !one(service.network_configuration).assign_public_ip && toset(one(service.network_configuration).subnets) == toset([for subnet in aws_subnet.application : subnet.id]) && service.desired_count == 1 && one(service.deployment_circuit_breaker).enable && one(service.deployment_circuit_breaker).rollback && service.deployment_minimum_healthy_percent == 100 && service.wait_for_steady_state])
     error_message = "Deploy only private Fargate services with health checks, uninterrupted rolling updates, and automatic failure rollback."
   }

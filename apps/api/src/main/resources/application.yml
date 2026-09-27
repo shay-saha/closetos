@@ -62,6 +62,10 @@ closetos:
     cloudfront-key-id: ${CLOUDFRONT_KEY_ID:}
     cloudfront-private-key: ${CLOUDFRONT_PRIVATE_KEY:}
   search:
+    provider: ${EMBEDDING_PROVIDER:auto}
+    bedrock-model-id: ${BEDROCK_EMBEDDING_MODEL_ID:}
+    bedrock-region: ${BEDROCK_EMBEDDING_REGION:${AWS_REGION:eu-west-2}}
+    bedrock-dimensions: ${BEDROCK_EMBEDDING_DIMENSIONS:1024}
     dispatch-enabled: ${EMBEDDING_DISPATCH_ENABLED:false}
   auth:
     client-id: ${COGNITO_CLIENT_ID}
