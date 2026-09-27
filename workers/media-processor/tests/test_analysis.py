@@ -189,3 +189,26 @@ def test_unconfigured_analysis_never_calls_aws(monkeypatch):
     )
     analysis = BedrockAnalysis()
     assert analysis.analyse(None, None, None) is None
+
+
+@pytest.mark.parametrize(
+    ("analysis_region", "expected"), [("us-east-1", "us-east-1"), (None, "eu-west-2")]
+)
+def test_analysis_model_region_is_independent_of_storage_region(
+    monkeypatch, analysis_region, expected
+):
+    monkeypatch.setenv("BEDROCK_ANALYSIS_MODEL_ID", "configured-model")
+    monkeypatch.setenv("AWS_REGION", "eu-west-2")
+    if analysis_region:
+        monkeypatch.setenv("BEDROCK_ANALYSIS_REGION", analysis_region)
+    else:
+        monkeypatch.delenv("BEDROCK_ANALYSIS_REGION", raising=False)
+    calls = []
+    monkeypatch.setattr(
+        "closetos_media.analysis.boto3.client",
+        lambda service, **kwargs: calls.append((service, kwargs)) or object(),
+    )
+    assert BedrockAnalysis().client is not None
+    assert calls[0][0] == "bedrock-runtime"
+    assert calls[0][1]["region_name"] == expected
+    assert calls[0][1]["config"].read_timeout == 90

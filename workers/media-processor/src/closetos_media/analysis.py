@@ -51,7 +51,9 @@ class BedrockAnalysis:
         if self.model_id:
             self.client = boto3.client(
                 "bedrock-runtime",
-                region_name=os.getenv("AWS_REGION", "eu-west-2"),
+                region_name=os.getenv(
+                    "BEDROCK_ANALYSIS_REGION", os.getenv("AWS_REGION", "eu-west-2")
+                ),
                 config=Config(
                     connect_timeout=10,
                     read_timeout=90,
