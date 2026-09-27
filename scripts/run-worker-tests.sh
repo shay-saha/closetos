@@ -10,4 +10,6 @@ export EMBEDDING_EVALUATION=1
 ./scripts/prepare-local-models.sh embeddings
 uv run --project workers/media-processor ruff check workers/media-processor
 uv run --project workers/media-processor ruff format --check workers/media-processor
+uv run --project workers/media-processor ruff check scripts/check-worker-container.py
+uv run --project workers/media-processor ruff format --check scripts/check-worker-container.py
 exec uv run --project workers/media-processor pytest workers/media-processor/tests

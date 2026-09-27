@@ -6,6 +6,14 @@
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.pem
+**/*.key
+.aws
+docs
 **/.env*
 **/*.md
 **/*.log

@@ -9,12 +9,15 @@ RUN uv run --no-sync python -m closetos_media download-model
 RUN uv run --no-sync python -m closetos_media download-embeddings
 
 FROM python:3.12-slim-bookworm
-RUN useradd --system --uid 10001 --create-home worker
+RUN useradd --system --uid 10001 --create-home worker \
+    && chown worker:worker /tmp && chmod 1777 /tmp
 WORKDIR /worker
 COPY --from=build --chown=worker:worker /worker /worker
 COPY --from=build --chown=worker:worker /models /models
-ENV PATH=/worker/.venv/bin:$PATH U2NET_HOME=/models OMP_NUM_THREADS=2 PYTHONUNBUFFERED=1
+ENV PATH=/worker/.venv/bin:$PATH U2NET_HOME=/models OMP_NUM_THREADS=2 PYTHONUNBUFFERED=1 \
+    NUMBA_CACHE_DIR=/tmp/numba XDG_CACHE_HOME=/tmp/cache
 USER worker
+VOLUME ["/tmp"]
 EXPOSE 8800
 ENTRYPOINT ["python", "-m", "closetos_media"]
 CMD ["process"]

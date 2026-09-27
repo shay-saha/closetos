@@ -1,4 +1,4 @@
-.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-infra format-api
+.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-infra format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
@@ -16,6 +16,10 @@ media-worker:
 
 test-worker:
 	./scripts/run-worker-tests.sh
+
+test-worker-container:
+	docker build -f workers/media-processor/Dockerfile -t closetos-media:local-runtime .
+	uv run --project workers/media-processor python scripts/check-worker-container.py
 
 test-infra:
 	./scripts/run-infrastructure-tests.sh
