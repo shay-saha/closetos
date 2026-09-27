@@ -12,6 +12,7 @@
   <version>0.1.0-SNAPSHOT</version>
   <properties>
     <java.version>25</java.version>
+    <tomcat.version>11.0.26</tomcat.version>
     <spring-modulith.version>2.1.1</spring-modulith.version>
     <aws-sdk.version>2.55.9</aws-sdk.version>
     <ortools.version>9.15.6755</ortools.version>
