@@ -191,6 +191,7 @@ class MediaHttpTest extends PostgresIntegrationTest {
     void duplicateUploadAndResultEventsCreateOneJobAndNeverOverwriteManualMetadata()
             throws Exception {
         Fixture fixture = uploaded("upload-events");
+        assertThat(processing.runnable(fixture.job().jobId())).isTrue();
         transitions.uploaded(fixture.image(), "duplicate-upload:" + fixture.image().id());
         assertThat(jobCount(fixture.image().id())).isEqualTo(1);
         ProcessingResult result = verifiedResult(fixture.job());
@@ -200,6 +201,7 @@ class MediaHttpTest extends PostgresIntegrationTest {
         var snapshot = processing.snapshot(fixture.image().id(), fixture.image().wardrobeId());
         assertThat(snapshot.state()).isEqualTo(ProcessingStatus.READY_FOR_REVIEW);
         assertThat(snapshot.canRetry()).isFalse();
+        assertThat(processing.runnable(fixture.job().jobId())).isFalse();
         mvc.perform(as(get("/api/v1/garments/" + fixture.image().garmentId()), "upload-events"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("New piece"))
@@ -215,6 +217,8 @@ class MediaHttpTest extends PostgresIntegrationTest {
         Fixture fixture = uploaded("upload-retry");
         transitions.failed(fixture.job().jobId(), "TEST_FAILURE", "Try another photograph.");
         WorkflowJob retry = transitions.retry(fixture.image().id(), fixture.image().wardrobeId());
+        assertThat(processing.runnable(fixture.job().jobId())).isFalse();
+        assertThat(processing.runnable(retry.jobId())).isTrue();
         assertThat(retry.imageId()).isEqualTo(fixture.job().imageId());
         assertThat(retry.garmentId()).isEqualTo(fixture.job().garmentId());
         assertThat(retry.executionName()).isNotEqualTo(fixture.job().executionName());

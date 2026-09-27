@@ -102,6 +102,20 @@ public class ProcessingRegistry implements ProcessingAccess {
     }
 
     @Override
+    public boolean runnable(UUID id) {
+        return jdbc.sql(
+                        """
+                SELECT EXISTS (SELECT 1 FROM processing_job j
+                    WHERE j.id = :id AND j.state IN ('UPLOADED', 'PROCESSING_MEDIA', 'ANALYSING')
+                    AND NOT EXISTS (SELECT 1 FROM processing_job newer
+                        WHERE newer.image_id = j.image_id AND newer.attempt_count > j.attempt_count))
+                """)
+                .param("id", id)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
     public ProcessingSnapshot snapshot(UUID id, UUID wardrobe) {
         ImageRecord image = media.ownedImage(id, wardrobe);
         var latest =

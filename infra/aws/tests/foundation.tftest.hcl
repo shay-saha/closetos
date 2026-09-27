@@ -112,10 +112,14 @@ run "least_privilege_service_and_workflow_roles" {
   }
   assert {
     condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Action])) == toset([
-      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "states:StartExecution",
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "states:StartExecution", "states:DescribeExecution",
       "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "kms:Decrypt", "bedrock:InvokeModel"
     ]) && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["InvokeEmbeddingModel"] == var.embedding_model_arn
     error_message = "The API may manage wardrobe objects, consume processing events, and invoke its embedding model without administrator or queue publishing permissions."
+  }
+  assert {
+    condition     = { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["ObserveMediaWorkflow"] == "arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:*"
+    error_message = "Workflow recovery may observe only this environment's media executions."
   }
   assert {
     condition     = { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement }["ListOwnedMediaForDeletion"].Condition.StringLike["s3:prefix"] == "users/*/garments/*/images/*/" && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["OwnedWardrobeMedia"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/*"

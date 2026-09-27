@@ -10,6 +10,8 @@ public interface ProcessingAccess {
 
     Optional<WorkflowJob> context(UUID jobId);
 
+    boolean runnable(UUID jobId);
+
     ProcessingSnapshot snapshot(UUID image, UUID wardrobe);
 
     boolean started(WorkflowJob job, String executionArn);

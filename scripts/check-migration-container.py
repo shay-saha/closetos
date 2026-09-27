@@ -120,7 +120,9 @@ def main():
             text=True,
             timeout=30,
         )
-        assert result.stdout.strip() == "9|009", "Packaged schema history is incomplete"
+        assert result.stdout.strip() == "10|010", (
+            "Packaged schema history is incomplete"
+        )
         subprocess.run(
             [
                 *inspection,
@@ -144,7 +146,7 @@ def main():
             and "checksum mismatch" in rejected.stdout + rejected.stderr
         )
         print(
-            "Migration container passed: 9 migrations, safe replay, changed-checksum refusal; no web startup"
+            "Migration container passed: 10 migrations, safe replay, changed-checksum refusal; no web startup"
         )
     finally:
         subprocess.run(

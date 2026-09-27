@@ -89,6 +89,12 @@ resource "aws_iam_role_policy" "api" {
         Resource = local.workflow_arn
       },
       {
+        Sid      = "ObserveMediaWorkflow"
+        Effect   = "Allow"
+        Action   = ["states:DescribeExecution"]
+        Resource = "arn:${local.partition}:states:${var.region}:${local.account_id}:execution:${local.name}-media:*"
+      },
+      {
         Sid      = "ConsumeMediaEvents"
         Effect   = "Allow"
         Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]

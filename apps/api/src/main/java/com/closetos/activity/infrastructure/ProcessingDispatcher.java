@@ -4,11 +4,13 @@ import com.closetos.activity.application.ProcessingResults;
 import com.closetos.activity.application.ProcessingTransitions;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.ProcessingAccess;
+import com.closetos.media.api.WorkflowCapacityUnavailable;
 import com.closetos.media.api.WorkflowJob;
 import com.closetos.media.api.WorkflowOrchestratorPort;
 import com.closetos.platform.api.DomainException;
 import com.closetos.platform.api.OutboxEntry;
 import com.closetos.platform.api.OutboxQueue;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -54,6 +56,8 @@ class ProcessingDispatcher {
             try {
                 dispatch(event);
                 queue.published(event);
+            } catch (WorkflowCapacityUnavailable exception) {
+                queue.defer(event, Duration.ofSeconds(5));
             } catch (RuntimeException exception) {
                 boolean terminal =
                         exception instanceof DomainException || event.publishAttempts() >= 5;
@@ -79,11 +83,18 @@ class ProcessingDispatcher {
             case "START_PROCESSING" -> {
                 WorkflowJob job = json.readValue(event.payload(), WorkflowJob.class);
                 if (processing.context(job.jobId()).isEmpty()) return;
-                if (!transitions.started(job, null)) return;
+                workflow.reserve(job);
+                if (!transitions.started(job, null)) {
+                    workflow.abandon(job);
+                    return;
+                }
                 var start = workflow.start(job);
                 transitions.started(job, start.executionArn());
-                if (start.completedResult() != null)
+                if (start.completedResult() != null) {
                     results.accept(start.completedResult(), "result:" + job.jobId());
+                    if (processing.context(job.jobId()).isEmpty())
+                        storage.deletePrefix(job.imagePrefix());
+                }
             }
             case "DELETE_MEDIA" ->
                     storage.deletePrefix(json.readTree(event.payload()).get("prefix").asText());
