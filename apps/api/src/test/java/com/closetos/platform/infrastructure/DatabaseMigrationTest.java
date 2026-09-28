@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.exception.FlywayValidateException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.postgresql.PGConnection;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -146,6 +148,200 @@ class DatabaseMigrationTest {
         }
         assertThatThrownBy(() -> DatabaseMigration.migrate(environment))
                 .isInstanceOf(FlywayValidateException.class);
+    }
+
+    @Test
+    void provisionsRuntimeCredentialsAndRestrictsSchemaAndAdministrativeData() throws Exception {
+        var configured = new HashMap<>(environment);
+        String password = "Runtime 'password' with spaces; " + UUID.randomUUID();
+        configured.put("APPLICATION_DATABASE_PASSWORD", password);
+        DatabaseMigration.migrate(configured);
+        try (var connection = connectRuntime(password);
+                var statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO user_profile(id,cognito_sub,display_name) VALUES ('00000000-0000-4000-8000-000000000001','restricted-test','Runtime')");
+            statement.execute(
+                    "INSERT INTO wardrobe(id,owner_id,name) VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','Wardrobe')");
+            statement.execute(
+                    "INSERT INTO garment(id,wardrobe_id,name,category,created_at,updated_at) VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Shirt','TOP',now(),now())");
+            statement.execute("UPDATE garment SET name='Updated shirt'");
+            try (var result = statement.executeQuery("SELECT name FROM garment")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("Updated shirt");
+            }
+            statement.execute("SELECT maximum_active FROM workflow_capacity WHERE id=1 FOR UPDATE");
+            statement.execute("SELECT * FROM expensive_action_policy");
+            statement.execute("SELECT '[1,0,0]'::vector <=> '[0,1,0]'::vector");
+            statement.execute("DELETE FROM garment");
+            for (String sql :
+                    new String[] {
+                        "CREATE TABLE injected(id integer)",
+                        "CREATE TEMP TABLE injected(id integer)",
+                        "CREATE SCHEMA injected",
+                        "ALTER TABLE garment ADD COLUMN injected integer",
+                        "DROP TABLE garment",
+                        "TRUNCATE garment",
+                        "SELECT * FROM flyway_schema_history",
+                        "UPDATE flyway_schema_history SET checksum=0",
+                        "UPDATE expensive_action_policy SET long_limit=100000",
+                        "DELETE FROM expensive_action_policy",
+                        "UPDATE workflow_capacity SET maximum_active=16",
+                        "CREATE ROLE injected",
+                        "SET ROLE " + POSTGRES.getUsername()
+                    }) {
+                assertThatThrownBy(() -> statement.execute(sql))
+                        .as(sql)
+                        .isInstanceOf(SQLException.class)
+                        .extracting(error -> ((SQLException) error).getSQLState())
+                        .isEqualTo("42501");
+            }
+        }
+        try (var connection = connect();
+                var statement = connection.createStatement();
+                var result =
+                        statement.executeQuery(
+                                "SELECT rolpassword FROM pg_authid WHERE rolname='closetos_app'")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).startsWith("SCRAM-SHA-256$").doesNotContain(password);
+        }
+    }
+
+    @Test
+    void replaysGrantsRemovesPrivilegeDriftAndRotatesCredentials() throws Exception {
+        var configured = new HashMap<>(environment);
+        String original = UUID.randomUUID() + " initial-runtime-password";
+        configured.put("APPLICATION_DATABASE_PASSWORD", original);
+        DatabaseMigration.migrate(configured);
+        try (var connection = connect();
+                var statement = connection.createStatement()) {
+            statement.execute("GRANT ALL ON ALL TABLES IN SCHEMA public TO closetos_app");
+            statement.execute("GRANT UPDATE(maximum_active) ON workflow_capacity TO closetos_app");
+            statement.execute(
+                    "GRANT SELECT(checksum), UPDATE(checksum) ON flyway_schema_history TO PUBLIC");
+        }
+        String rotated = UUID.randomUUID() + " rotated-runtime-password";
+        configured.put("APPLICATION_DATABASE_PASSWORD", rotated);
+        assertThat(DatabaseMigration.migrate(configured).migrationsExecuted).isZero();
+        assertThatThrownBy(() -> connectRuntime(original))
+                .isInstanceOf(SQLException.class)
+                .extracting(error -> ((SQLException) error).getSQLState())
+                .isEqualTo("28P01");
+        try (var connection = connectRuntime(rotated);
+                var statement = connection.createStatement()) {
+            statement.execute("SELECT maximum_active FROM workflow_capacity FOR UPDATE");
+            statement.execute("SELECT * FROM garment");
+            for (String sql :
+                    new String[] {
+                        "UPDATE workflow_capacity SET maximum_active=16",
+                        "SELECT checksum FROM flyway_schema_history",
+                        "UPDATE flyway_schema_history SET checksum=0",
+                        "UPDATE expensive_action_policy SET long_limit=100000"
+                    }) {
+                assertThatThrownBy(() -> statement.execute(sql))
+                        .as(sql)
+                        .isInstanceOf(SQLException.class)
+                        .extracting(error -> ((SQLException) error).getSQLState())
+                        .isEqualTo("42501");
+            }
+        }
+    }
+
+    @Test
+    void refusesUnsafeExistingRolesWithoutInstallingTheNewPassword() throws Exception {
+        var configured = new HashMap<>(environment);
+        String password = UUID.randomUUID() + " existing-runtime-password";
+        configured.put("APPLICATION_DATABASE_PASSWORD", password);
+        DatabaseMigration.migrate(configured);
+        try (var connection = connect();
+                var statement = connection.createStatement()) {
+            statement.execute("ALTER ROLE closetos_app CREATEDB");
+            try {
+                configured.put(
+                        "APPLICATION_DATABASE_PASSWORD",
+                        UUID.randomUUID() + " replacement-password");
+                assertThatThrownBy(() -> DatabaseMigration.migrate(configured))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessage("Application database access could not be configured.")
+                        .hasNoCause();
+                try (var runtime = connectRuntime(password)) {
+                    assertThat(runtime.isValid(5)).isTrue();
+                }
+            } finally {
+                statement.execute("ALTER ROLE closetos_app NOCREATEDB");
+            }
+        }
+    }
+
+    @Test
+    void rejectsInvalidApplicationPasswordsBeforeCreatingTheSchema() throws Exception {
+        for (String password : new String[] {"", "short", "a".repeat(257), "a".repeat(32) + '\0'}) {
+            var configured = new HashMap<>(environment);
+            configured.put("APPLICATION_DATABASE_PASSWORD", password);
+            assertThatThrownBy(() -> DatabaseMigration.migrate(configured))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("32–256");
+        }
+        try (var connection = connect();
+                var statement = connection.createStatement();
+                var result =
+                        statement.executeQuery(
+                                "SELECT to_regclass('flyway_schema_history') IS NULL")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getBoolean(1)).isTrue();
+        }
+    }
+
+    private java.sql.Connection connectRuntime(String password) throws SQLException {
+        return DriverManager.getConnection(
+                environment.get("DATABASE_URL"), "closetos_app", password);
+    }
+
+    @Test
+    void supportsADatabaseOwnerWithCreateRoleButWithoutPostgresSuperuser() throws Exception {
+        try (var postgres =
+                new PostgreSQLContainer(
+                        DockerImageName.parse("pgvector/pgvector:pg18")
+                                .asCompatibleSubstituteFor("postgres"))) {
+            postgres.start();
+            String ownerPassword = UUID.randomUUID() + " migration-owner-password";
+            try (var connection =
+                            DriverManager.getConnection(
+                                    postgres.getJdbcUrl(),
+                                    postgres.getUsername(),
+                                    postgres.getPassword());
+                    var statement = connection.createStatement()) {
+                statement.execute("CREATE ROLE migration_owner LOGIN CREATEDB CREATEROLE");
+                connection
+                        .unwrap(PGConnection.class)
+                        .alterUserPassword(
+                                "migration_owner", ownerPassword.toCharArray(), "scram-sha-256");
+                statement.execute("CREATE EXTENSION vector");
+                statement.execute(
+                        "ALTER DATABASE "
+                                + postgres.getDatabaseName()
+                                + " OWNER TO migration_owner");
+            }
+            String runtimePassword = UUID.randomUUID() + " runtime-password";
+            var configuration =
+                    Map.of(
+                            "DATABASE_URL",
+                            postgres.getJdbcUrl(),
+                            "DATABASE_USERNAME",
+                            "migration_owner",
+                            "DATABASE_PASSWORD",
+                            ownerPassword,
+                            "APPLICATION_DATABASE_PASSWORD",
+                            runtimePassword);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(11);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
+            try (var connection =
+                            DriverManager.getConnection(
+                                    postgres.getJdbcUrl(), "closetos_app", runtimePassword);
+                    var statement = connection.createStatement();
+                    var result = statement.executeQuery("SELECT * FROM garment")) {
+                assertThat(result.next()).isFalse();
+            }
+        }
     }
 
     @Test

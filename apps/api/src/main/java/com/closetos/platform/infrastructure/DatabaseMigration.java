@@ -20,17 +20,23 @@ public final class DatabaseMigration {
         if (!url.startsWith("jdbc:postgresql://"))
             throw new IllegalArgumentException(
                     "Migration requires an explicit PostgreSQL JDBC URL.");
-        return Flyway.configure()
-                .dataSource(url, username, password)
-                .locations("classpath:db/migration")
-                .validateMigrationNaming(true)
-                .validateOnMigrate(true)
-                .baselineOnMigrate(false)
-                .cleanDisabled(true)
-                .connectRetries(2)
-                .lockRetryCount(12)
-                .load()
-                .migrate();
+        String applicationPassword = environment.get("APPLICATION_DATABASE_PASSWORD");
+        DatabaseRuntimeAccess.validatePassword(applicationPassword);
+        MigrateResult result =
+                Flyway.configure()
+                        .dataSource(url, username, password)
+                        .locations("classpath:db/migration")
+                        .validateMigrationNaming(true)
+                        .validateOnMigrate(true)
+                        .baselineOnMigrate(false)
+                        .cleanDisabled(true)
+                        .connectRetries(2)
+                        .lockRetryCount(12)
+                        .load()
+                        .migrate();
+        if (applicationPassword != null)
+            DatabaseRuntimeAccess.reconcile(url, username, password, applicationPassword);
+        return result;
     }
 
     private static String required(Map<String, String> environment, String name) {
