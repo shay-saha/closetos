@@ -19,7 +19,7 @@ resource "aws_iam_role_policy" "migration_execution" {
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
       { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"], Resource = aws_ecr_repository.application["api"].arn },
       { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.migration.arn}:log-stream:*" },
-      { Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = aws_db_instance.main.master_user_secret[0].secret_arn }
+      { Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.application["database-app"].arn] }
     ]
   })
 }
@@ -46,8 +46,11 @@ resource "aws_ecs_task_definition" "migration" {
     entryPoint             = ["java"]
     command                = ["-XX:MaxRAMPercentage=75", "-Dloader.main=com.closetos.platform.infrastructure.DatabaseMigration", "-cp", "/app/app.jar", "org.springframework.boot.loader.launch.PropertiesLauncher"]
     environment            = [{ name = "DATABASE_URL", value = local.database_url }, { name = "DATABASE_USERNAME", value = aws_db_instance.main.username }]
-    secrets                = [{ name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" }]
-    mountPoints            = [{ sourceVolume = "temporary", containerPath = "/tmp", readOnly = false }]
+    secrets = [
+      { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
+      { name = "APPLICATION_DATABASE_PASSWORD", valueFrom = aws_secretsmanager_secret.application["database-app"].arn }
+    ]
+    mountPoints = [{ sourceVolume = "temporary", containerPath = "/tmp", readOnly = false }]
     logConfiguration = {
       logDriver = "awslogs"
       options   = { "awslogs-group" = aws_cloudwatch_log_group.migration.name, "awslogs-region" = var.region, "awslogs-stream-prefix" = "migration" }

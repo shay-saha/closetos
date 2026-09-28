@@ -14,7 +14,7 @@ locals {
     }]
   })
   service_secrets = {
-    api          = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.application["media-signing"].arn]
+    api          = [aws_secretsmanager_secret.application["database-app"].arn, aws_secretsmanager_secret.application["media-signing"].arn]
     web          = [aws_secretsmanager_secret.application["web-session"].arn]
     media-worker = []
   }

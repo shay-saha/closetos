@@ -39,7 +39,7 @@ locals {
   api_environment = {
     AWS_REGION                                         = var.region
     DATABASE_URL                                       = local.database_url
-    DATABASE_USERNAME                                  = aws_db_instance.main.username
+    DATABASE_USERNAME                                  = "closetos_app"
     COGNITO_ISSUER_URI                                 = local.oidc_issuer
     COGNITO_CLIENT_ID                                  = aws_cognito_user_pool_client.web.id
     MEDIA_BUCKET                                       = aws_s3_bucket.media.id
@@ -69,7 +69,7 @@ locals {
   container_environment = { api = local.api_environment, web = local.web_environment }
   container_secrets = {
     api = [
-      { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
+      { name = "DATABASE_PASSWORD", valueFrom = aws_secretsmanager_secret.application["database-app"].arn },
       { name = "CLOUDFRONT_PRIVATE_KEY", valueFrom = aws_secretsmanager_secret.application["media-signing"].arn }
     ]
     web = [{ name = "NEXTAUTH_SECRET", valueFrom = aws_secretsmanager_secret.application["web-session"].arn }]

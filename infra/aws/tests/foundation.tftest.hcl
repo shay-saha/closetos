@@ -79,8 +79,8 @@ run "development_security_and_cost_boundaries" {
     error_message = "Released images must remain immutable, scanned, and available for rollback."
   }
   assert {
-    condition     = toset(keys(aws_secretsmanager_secret.application)) == toset(["web-session", "media-signing"]) && alltrue([for secret in aws_secretsmanager_secret.application : secret.recovery_window_in_days == 30])
-    error_message = "Keep session and signing secrets separate and recoverable; supply values outside Terraform."
+    condition     = toset(keys(aws_secretsmanager_secret.application)) == toset(["web-session", "media-signing", "database-app"]) && alltrue([for secret in aws_secretsmanager_secret.application : secret.recovery_window_in_days == 30])
+    error_message = "Keep runtime database, session, and signing secrets separate and recoverable; supply values outside Terraform."
   }
 }
 
@@ -131,7 +131,7 @@ run "least_privilege_service_and_workflow_roles" {
     error_message = "Workers may write only versioned results and invoke configured analysis models; they may not delete media or access domain storage and secrets."
   }
   assert {
-    condition     = toset({ for statement in jsondecode(aws_iam_role_policy.execution["api"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.application["media-signing"].arn]) && toset({ for statement in jsondecode(aws_iam_role_policy.execution["web"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_secretsmanager_secret.application["web-session"].arn]) && !contains([for statement in jsondecode(aws_iam_role_policy.execution["media-worker"].policy).Statement : statement.Sid], "ReadStartupSecrets")
+    condition     = toset({ for statement in jsondecode(aws_iam_role_policy.execution["api"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_secretsmanager_secret.application["database-app"].arn, aws_secretsmanager_secret.application["media-signing"].arn]) && toset({ for statement in jsondecode(aws_iam_role_policy.execution["web"].policy).Statement : statement.Sid => statement.Resource }["ReadStartupSecrets"]) == toset([aws_secretsmanager_secret.application["web-session"].arn]) && !contains([for statement in jsondecode(aws_iam_role_policy.execution["media-worker"].policy).Statement : statement.Sid], "ReadStartupSecrets")
     error_message = "Container execution roles may load only their own startup secrets; the media worker needs none."
   }
   assert {
