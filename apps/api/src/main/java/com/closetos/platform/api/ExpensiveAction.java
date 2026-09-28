@@ -4,7 +4,8 @@ public enum ExpensiveAction {
     PHOTO_UPLOAD("photo upload"),
     PROCESSING_RETRY("photo processing retry"),
     SEMANTIC_QUERY("semantic search"),
-    GARMENT_EMBEDDING("wardrobe indexing");
+    GARMENT_EMBEDDING("wardrobe indexing"),
+    DATA_EXPORT("data download");
 
     private final String description;
 
