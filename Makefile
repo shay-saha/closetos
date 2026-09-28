@@ -1,4 +1,4 @@
-.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra format-api
+.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra test-security-gates install-trivy scan-dependencies scan-codeql format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
@@ -47,3 +47,15 @@ test-api:
 
 format-api:
 	cd apps/api && ./mvnw spotless:apply
+
+install-trivy:
+	./scripts/install-trivy.sh .security/bin
+
+scan-dependencies:
+	./scripts/scan-dependencies.sh
+
+test-security-gates:
+	node --test scripts/check-codeql-results.test.mjs
+
+scan-codeql:
+	./scripts/scan-codeql.sh

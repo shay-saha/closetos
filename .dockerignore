@@ -1,4 +1,5 @@
 .git
+.security
 **/node_modules
 **/.next
 **/target
