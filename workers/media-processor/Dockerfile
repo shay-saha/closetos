@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm AS build
+FROM python:3.12-slim-trixie AS build
 COPY --from=ghcr.io/astral-sh/uv:0.10.8 /uv /usr/local/bin/uv
 WORKDIR /worker
 COPY workers/media-processor/pyproject.toml workers/media-processor/uv.lock ./
@@ -8,7 +8,7 @@ ENV U2NET_HOME=/models OMP_NUM_THREADS=2
 RUN uv run --no-sync python -m closetos_media download-model
 RUN uv run --no-sync python -m closetos_media download-embeddings
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-trixie
 RUN useradd --system --uid 10001 --create-home worker \
     && chown worker:worker /tmp && chmod 1777 /tmp
 WORKDIR /worker

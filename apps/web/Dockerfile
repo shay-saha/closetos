@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS build
+FROM node:24-trixie-slim AS build
 WORKDIR /build
 RUN npm install --global pnpm@10.30.3
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -7,7 +7,7 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 RUN pnpm --filter @closetos/web build
 
-FROM node:24-bookworm-slim
+FROM node:24-trixie-slim
 RUN chown node:node /tmp && chmod 1777 /tmp
 WORKDIR /app
 ENV NODE_ENV=production
