@@ -22,6 +22,7 @@ if not environment.exists():
 
 existing = {line.split("=", 1)[0] for line in environment.read_text().splitlines() if "=" in line}
 local_media = {
+    "APPLICATION_DATABASE_PASSWORD": secrets.token_urlsafe(48),
     "MINIO_ROOT_USER": "closetos-local",
     "MINIO_ROOT_PASSWORD": secrets.token_urlsafe(32),
     "MEDIA_WORKER_TOKEN": secrets.token_urlsafe(48),

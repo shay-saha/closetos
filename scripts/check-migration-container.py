@@ -49,6 +49,7 @@ def main():
         "DATABASE_URL": "jdbc:postgresql://localhost:5432/" + database,
         "DATABASE_USERNAME": "closetos",
         "DATABASE_PASSWORD": values["DATABASE_PASSWORD"],
+        "APPLICATION_DATABASE_PASSWORD": values["APPLICATION_DATABASE_PASSWORD"],
     }
     command = [
         "docker",
@@ -71,6 +72,8 @@ def main():
         "DATABASE_USERNAME",
         "-e",
         "DATABASE_PASSWORD",
+        "-e",
+        "APPLICATION_DATABASE_PASSWORD",
         args.image,
         "-XX:MaxRAMPercentage=75",
         "-Dloader.main=com.closetos.platform.infrastructure.DatabaseMigration",
@@ -123,6 +126,25 @@ def main():
         assert result.stdout.strip() == "11|011", (
             "Packaged schema history is incomplete"
         )
+        grants = subprocess.run(
+            [
+                *inspection,
+                "SET ROLE closetos_app; SELECT count(*) FROM garment; "
+                "SELECT maximum_active FROM workflow_capacity FOR UPDATE; "
+                "SELECT has_table_privilege(current_user,'flyway_schema_history','SELECT'), "
+                "has_table_privilege(current_user,'expensive_action_policy','UPDATE'), "
+                "has_column_privilege(current_user,'workflow_capacity','maximum_active','UPDATE'), "
+                "has_schema_privilege(current_user,'public','CREATE'), "
+                "has_database_privilege(current_user,current_database(),'TEMP');",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert grants.stdout.strip().splitlines() == ["SET", "0", "4", "f|f|f|f|f"], (
+            "Packaged migration did not install restricted application grants"
+        )
         subprocess.run(
             [
                 *inspection,
@@ -146,7 +168,7 @@ def main():
             and "checksum mismatch" in rejected.stdout + rejected.stderr
         )
         print(
-            "Migration container passed: 11 migrations, safe replay, changed-checksum refusal; no web startup"
+            "Migration container passed: 11 migrations, safe replay, restricted runtime grants, changed-checksum refusal; no web startup"
         )
     finally:
         subprocess.run(
