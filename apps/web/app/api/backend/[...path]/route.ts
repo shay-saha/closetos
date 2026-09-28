@@ -41,13 +41,18 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       },
       body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.text(),
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(
+        request.method === "GET" && path.join("/") === "me/data" ? 90_000 : 15_000,
+      ),
     });
     const result = new NextResponse(response.body, {
       status: response.status,
       headers: {
         "Content-Type": response.headers.get("content-type") ?? "application/json",
         "Cache-Control": "no-store",
+        ...(response.headers.has("content-disposition")
+          ? { "Content-Disposition": response.headers.get("content-disposition")! }
+          : {}),
         ...(response.headers.has("x-request-id")
           ? { "X-Request-Id": response.headers.get("x-request-id")! }
           : {}),

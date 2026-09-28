@@ -45,3 +45,33 @@ it("preserves the account limit message and retry timing through the authenticat
   });
   expect(fetch).toHaveBeenCalledOnce();
 });
+
+it("streams private data attachments without exposing backend credentials or internal headers", async () => {
+  vi.mocked(getToken).mockResolvedValue({ accessToken: "private-session-token" });
+  const fetch = vi.fn().mockResolvedValue(
+    new Response('{"schemaVersion":1,"complete":true}', {
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": 'attachment; filename="closetos-data-2026-10-02.json"',
+        "X-Internal-Secret": "private",
+      },
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const response = await GET(new NextRequest("http://localhost:3000/api/backend/me/data"), {
+    params: Promise.resolve({ path: ["me", "data"] }),
+  });
+  expect(response.headers.get("content-disposition")).toBe(
+    'attachment; filename="closetos-data-2026-10-02.json"',
+  );
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("x-internal-secret")).toBeNull();
+  expect(await response.json()).toEqual({ schemaVersion: 1, complete: true });
+  expect(fetch).toHaveBeenCalledWith(
+    expect.any(URL),
+    expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer private-session-token" }),
+      cache: "no-store",
+    }),
+  );
+});
