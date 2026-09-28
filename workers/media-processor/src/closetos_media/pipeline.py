@@ -48,9 +48,9 @@ class Pipeline:
                 )
             else:
                 result.analysis_failure = "ANALYSIS_NOT_CONFIGURED"
-        except Exception:
+        except Exception as error:
             # Analysis is optional; a successful isolation must remain available for manual review.
-            LOG.exception("Analysis failed for job %s", job.job_id)
+            LOG.warning("Analysis failed for job %s (%s)", job.job_id, type(error).__name__)
             result.analysis_key = None
             result.analysis_failure = "ANALYSIS_UNAVAILABLE"
         self.storage.write(key, result.model_dump_json(by_alias=True).encode(), "application/json")

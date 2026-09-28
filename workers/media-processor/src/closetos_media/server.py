@@ -89,7 +89,7 @@ def process(job: WorkflowJob, authorization: Annotated[str | None, Header()] = N
     try:
         return app.state.pipeline.process(job)
     except ValueError as error:
-        LOG.info("Invalid photograph for job %s: %s", job.job_id, error)
+        LOG.info("Invalid photograph for job %s (%s)", job.job_id, type(error).__name__)
         raise HTTPException(422, "The photograph could not be processed") from error
     finally:
         app.state.capacity.release()

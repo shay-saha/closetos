@@ -163,10 +163,10 @@ def test_rejects_empty_and_opaque_masks(fill):
     assert not storage.writes
 
 
-def test_analysis_failure_preserves_successful_images():
+def test_analysis_failure_preserves_successful_images_without_logging_model_content(caplog):
     class FailedAnalysis:
         def analyse(self, job, result, storage):
-            raise RuntimeError("Unavailable model")
+            raise RuntimeError("Private model output\nFORGED_LOG_EVENT")
 
     data = photograph()
     job = job_for(data)
@@ -176,6 +176,11 @@ def test_analysis_failure_preserves_successful_images():
     assert result.analysis_failure == "ANALYSIS_UNAVAILABLE"
     assert len(result.assets) == 5
     assert result.analysis_key is None
+    assert str(job.job_id) in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "Private model output" not in caplog.text
+    assert "FORGED_LOG_EVENT" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_source_and_output_keys_cannot_cross_tenant_or_image_boundaries():
