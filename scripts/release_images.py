@@ -251,10 +251,18 @@ def publish(release, service, image, scan, destination):
     return artifact
 
 
-def collect(release, directory, destination):
-    artifacts = {}
-    for service in sorted(SERVICES):
-        artifact = read_json(Path(directory) / f"{service}.json")
+def validate_manifest(manifest, release):
+    require(isinstance(manifest, dict), "The release manifest is invalid.")
+    require(
+        all(manifest.get(key) == value for key, value in release.items()),
+        "The release manifest belongs to another commit, publication, or environment.",
+    )
+    artifacts = manifest.get("images")
+    require(
+        isinstance(artifacts, dict) and set(artifacts) == SERVICES,
+        "A release must contain all three published images.",
+    )
+    for service, artifact in artifacts.items():
         require(isinstance(artifact, dict), "A published image artifact is invalid.")
         require(
             all(artifact.get(key) == value for key, value in release.items())
@@ -272,8 +280,20 @@ def collect(release, directory, destination):
             == f"{repository_uri(release, service)}@{digest}",
             "A published image must identify an exact digest in its environment's repository.",
         )
-        artifacts[service] = artifact
-    manifest = {**release, "images": artifacts}
+    return manifest
+
+
+def collect(release, directory, destination):
+    manifest = validate_manifest(
+        {
+            **release,
+            "images": {
+                service: read_json(Path(directory) / f"{service}.json")
+                for service in SERVICES
+            },
+        },
+        release,
+    )
     write_json(destination, manifest)
     return manifest
 

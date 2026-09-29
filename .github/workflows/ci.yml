@@ -49,8 +49,8 @@ jobs:
       - run: uv sync --project workers/media-processor --locked
       - name: Check release tool formatting and lint
         run: |
-          uv run --project workers/media-processor ruff check scripts/release_images.py scripts/test_release_images.py
-          uv run --project workers/media-processor ruff format --check scripts/release_images.py scripts/test_release_images.py
+          uv run --project workers/media-processor ruff check scripts/release_*.py scripts/test_release_*.py
+          uv run --project workers/media-processor ruff format --check scripts/release_*.py scripts/test_release_*.py
       - run: make test-worker
 
   api:
