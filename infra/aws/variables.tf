@@ -102,7 +102,7 @@ variable "image_digests" {
 variable "services_enabled" {
   type        = bool
   default     = false
-  description = "Start API/web services only after secrets are initialized and database migrations succeed."
+  description = "Enable bounded service autoscaling after the release controller starts migrated, healthy services. Terraform prepares services with zero tasks and preserves live release revisions and counts."
 }
 variable "route53_zone_id" {
   type    = string

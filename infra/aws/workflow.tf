@@ -23,19 +23,8 @@ locals {
   workflow_required_strings = ["jobId", "imageId", "garmentId", "wardrobeId", "sourceKey", "outputPrefix", "mimeType", "checksumSha256", "pipelineVersion", "requestId"]
 }
 
-resource "aws_sfn_state_machine" "media" {
-  count      = local.runtime_enabled ? 1 : 0
-  name       = "${local.name}-media"
-  role_arn   = aws_iam_role.workflow.arn
-  type       = "STANDARD"
-  depends_on = [aws_iam_role_policy.workflow, aws_sqs_queue_policy.media, aws_route.application_egress]
-  logging_configuration {
-    log_destination        = "${aws_cloudwatch_log_group.workflow.arn}:*"
-    include_execution_data = false
-    level                  = "ALL"
-  }
-  tracing_configuration { enabled = true }
-  definition = jsonencode({
+locals {
+  media_workflow_definition = local.runtime_enabled ? {
     StartAt        = "PrepareInput"
     TimeoutSeconds = 3600
     States = {
@@ -156,5 +145,23 @@ resource "aws_sfn_state_machine" "media" {
       ProcessingFailed = { Type = "Fail", Error = "MediaProcessingFailed", Cause = "The processing failure was published for recovery." }
       Success          = { Type = "Succeed" }
     }
-  })
+  } : null
+}
+
+resource "aws_sfn_state_machine" "media" {
+  count      = local.runtime_enabled ? 1 : 0
+  name       = "${local.name}-media"
+  role_arn   = aws_iam_role.workflow.arn
+  type       = "STANDARD"
+  depends_on = [aws_iam_role_policy.workflow, aws_sqs_queue_policy.media, aws_route.application_egress]
+  logging_configuration {
+    log_destination        = "${aws_cloudwatch_log_group.workflow.arn}:*"
+    include_execution_data = false
+    level                  = "ALL"
+  }
+  tracing_configuration { enabled = true }
+  definition = jsonencode(local.media_workflow_definition)
+  lifecycle {
+    ignore_changes = [definition]
+  }
 }

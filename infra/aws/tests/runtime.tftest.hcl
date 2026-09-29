@@ -81,7 +81,7 @@ run "development_runtime_contract" {
     error_message = "Use direct Bedrock embeddings with the permitted model and its region, without a permanent worker service."
   }
   assert {
-    condition     = alltrue([for service in aws_ecs_service.application : service.launch_type == "FARGATE" && !one(service.network_configuration).assign_public_ip && toset(one(service.network_configuration).subnets) == toset([for subnet in aws_subnet.application : subnet.id]) && service.desired_count == 1 && one(service.deployment_circuit_breaker).enable && one(service.deployment_circuit_breaker).rollback && service.deployment_minimum_healthy_percent == 100 && service.wait_for_steady_state])
+    condition     = alltrue([for service in aws_ecs_service.application : service.launch_type == "FARGATE" && !one(service.network_configuration).assign_public_ip && toset(one(service.network_configuration).subnets) == toset([for subnet in aws_subnet.application : subnet.id]) && service.desired_count == 0 && one(service.deployment_circuit_breaker).enable && one(service.deployment_circuit_breaker).rollback && service.deployment_minimum_healthy_percent == 100 && service.wait_for_steady_state])
     error_message = "Deploy only private Fargate services with health checks, uninterrupted rolling updates, and automatic failure rollback."
   }
   assert {
@@ -134,8 +134,8 @@ run "production_runtime_redundancy" {
     services_enabled = true
   }
   assert {
-    condition     = alltrue([for service in aws_ecs_service.application : service.desired_count == 2]) && alltrue([for target in aws_appautoscaling_target.application : target.min_capacity == 2]) && aws_lb.application[0].enable_deletion_protection && aws_ecs_task_definition.service["api"].memory == "2048"
-    error_message = "Production must keep two healthy service instances and protect its public ingress."
+    condition     = alltrue([for service in aws_ecs_service.application : service.desired_count == 0]) && alltrue([for target in aws_appautoscaling_target.application : target.min_capacity == 2]) && aws_lb.application[0].enable_deletion_protection && aws_ecs_task_definition.service["api"].memory == "2048"
+    error_message = "Prepare stopped services, require two healthy instances when released, and protect production ingress."
   }
 }
 

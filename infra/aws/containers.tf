@@ -81,6 +81,7 @@ locals {
 }
 resource "aws_ecs_task_definition" "service" {
   for_each                 = local.services
+  skip_destroy             = true
   family                   = "${local.name}-${each.key}"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -114,6 +115,7 @@ resource "aws_ecs_task_definition" "service" {
 }
 resource "aws_ecs_task_definition" "media" {
   count                    = local.runtime_enabled ? 1 : 0
+  skip_destroy             = true
   family                   = "${local.name}-media"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -155,7 +157,7 @@ resource "aws_ecs_service" "application" {
   name                               = "${local.name}-${each.key}"
   cluster                            = aws_ecs_cluster.application.id
   task_definition                    = aws_ecs_task_definition.service[each.key].arn
-  desired_count                      = var.services_enabled ? (local.production ? 2 : 1) : 0
+  desired_count                      = 0
   launch_type                        = "FARGATE"
   platform_version                   = "1.4.0"
   health_check_grace_period_seconds  = 120
@@ -165,6 +167,9 @@ resource "aws_ecs_service" "application" {
   propagate_tags                     = "SERVICE"
   enable_execute_command             = false
   wait_for_steady_state              = true
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
   deployment_circuit_breaker {
     enable   = true
     rollback = true

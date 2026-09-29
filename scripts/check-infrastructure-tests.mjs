@@ -42,6 +42,16 @@ export async function checkInfrastructureTests(
         report(`${event["@testrun"]}: rendered workflow schema and paths pass`);
       }
     }
+    const preparedWorkflow = event.test_state.outputs?.processing_workflow_definition?.value;
+    if (preparedWorkflow) {
+      const result = validateWorkflow(preparedWorkflow);
+      if (!result.isValid) {
+        failedWorkflow = true;
+        report(`${event["@testrun"]}: invalid prepared workflow: ${result.errorsText()}`);
+      } else {
+        report(`${event["@testrun"]}: prepared workflow schema and paths pass`);
+      }
+    }
   }
   if (
     !summary ||

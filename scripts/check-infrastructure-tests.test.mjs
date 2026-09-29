@@ -54,6 +54,26 @@ test("rejects unresolved transitions in an otherwise successful Terraform run", 
   );
 });
 
+test("rejects an invalid prepared release even when the active workflow still passes", async () => {
+  const event = workflow({ StartAt: "Done", States: { Done: { Type: "Succeed" } } });
+  event.test_state.outputs = {
+    processing_workflow_definition: {
+      value: { StartAt: "Start", States: { Start: { Type: "Pass", Next: "Missing" } } },
+    },
+  };
+  await assert.rejects(verify([event, success]), /Workflow validation failed/);
+});
+
+test("accepts independently valid active and prepared release workflows", async () => {
+  const event = workflow({ StartAt: "Old", States: { Old: { Type: "Succeed" } } });
+  event.test_state.outputs = {
+    processing_workflow_definition: {
+      value: { StartAt: "New", States: { New: { Type: "Succeed" } } },
+    },
+  };
+  await verify([event, success]);
+});
+
 test("rejects an invalid reference path that Terraform treats as an opaque string", async () => {
   await assert.rejects(
     verify([
