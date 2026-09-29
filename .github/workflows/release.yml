@@ -1,0 +1,158 @@
+name: Publish scanned release images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  security:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/security.yml
+
+  images:
+    needs: [quality, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: apps/api
+            dockerfile: apps/api/Dockerfile
+          - service: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+          - service: media-worker
+            context: .
+            dockerfile: workers/media-processor/Dockerfile
+    env:
+      SERVICE: ${{ matrix.service }}
+      BUILD_CONTEXT: ${{ matrix.context }}
+      DOCKERFILE: ${{ matrix.dockerfile }}
+      SOURCE_COMMIT: ${{ github.sha }}
+      PUBLICATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+      RELEASE_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      RELEASE_APPLICATION: ${{ vars.AWS_APPLICATION_NAME || 'closetos' }}
+      PUBLISH_ROLE: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Isolate temporary registry authentication
+        run: |
+          install -d -m 700 "$RUNNER_TEMP/release-registry"
+          printf 'DOCKER_CONFIG=%s\n' "$RUNNER_TEMP/release-registry" >> "$GITHUB_ENV"
+      - name: Check configured publisher before requesting AWS credentials
+        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        run: |
+          python3 scripts/release_images.py check \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment dev \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" --role "$PUBLISH_ROLE"
+      - name: Build the release image from this tested commit
+        run: |
+          docker build --pull --platform linux/amd64 --iidfile "$RUNNER_TEMP/image-id" \
+            --label "org.opencontainers.image.revision=$SOURCE_COMMIT" \
+            --file "$DOCKERFILE" --tag "closetos-$SERVICE:release" "$BUILD_CONTEXT"
+      - name: Install the checksum-verified vulnerability scanner
+        run: ./scripts/install-trivy.sh .security/bin
+      - name: Scan the exact release image
+        run: ./scripts/scan-container.sh "$SERVICE" "$(cat "$RUNNER_TEMP/image-id")"
+      - name: Obtain temporary AWS publishing credentials
+        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: closetos-publish-${{ github.run_id }}
+          role-duration-seconds: 1800
+          unset-current-credentials: true
+          use-existing-credentials: false
+          output-credentials: false
+          translate-env-variables: false
+      - name: Publish the scanned image and confirm its immutable registry digest
+        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        run: |
+          python3 scripts/release_images.py publish \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment dev \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+            --service "$SERVICE" --image "$(cat "$RUNNER_TEMP/image-id")" \
+            --scan ".security/reports/$SERVICE.json" --destination "$RUNNER_TEMP/release/$SERVICE.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-security-${{ matrix.service }}
+          path: .security/reports/${{ matrix.service }}.json
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success() && vars.AWS_PUBLISH_ROLE_ARN != ''
+        with:
+          name: published-image-${{ matrix.service }}
+          path: ${{ runner.temp }}/release/${{ matrix.service }}.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Report local-only verification when AWS is not configured
+        if: success() && vars.AWS_PUBLISH_ROLE_ARN == ''
+        run: echo 'The release image was built and scanned. ECR publishing awaits AWS_ACCOUNT_ID and AWS_PUBLISH_ROLE_ARN.' >> "$GITHUB_STEP_SUMMARY"
+
+  manifest:
+    needs: images
+    if: vars.AWS_PUBLISH_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: published-image-*
+          path: ${{ runner.temp }}/published-images
+          merge-multiple: true
+      - name: Verify all three published images belong to this release
+        env:
+          RELEASE_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+          RELEASE_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          RELEASE_APPLICATION: ${{ vars.AWS_APPLICATION_NAME || 'closetos' }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          PUBLICATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          python3 scripts/release_images.py collect \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment dev \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+            --directory "$RUNNER_TEMP/published-images" --destination "$RUNNER_TEMP/release.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-manifest
+          path: ${{ runner.temp }}/release.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish the verified release result
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: echo "All three scanned images for $SOURCE_COMMIT were published. Their immutable digests are in the release-manifest artifact." >> "$GITHUB_STEP_SUMMARY"

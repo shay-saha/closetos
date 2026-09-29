@@ -1,4 +1,4 @@
-.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra test-security-gates install-trivy scan-dependencies scan-codeql format-api
+.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra test-release test-security-gates install-trivy scan-dependencies scan-codeql format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
@@ -27,6 +27,9 @@ test-migration-container:
 
 test-infra:
 	./scripts/run-infrastructure-tests.sh
+
+test-release:
+	python3 -m unittest discover -s scripts -p 'test_release_*.py'
 
 api:
 	./scripts/run-api.sh

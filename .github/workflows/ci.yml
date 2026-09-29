@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.ref }}
+  group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,6 +32,8 @@ jobs:
           terraform_version: "1.16.4"
       - name: Verify infrastructure formatting, schema, and mocked AWS contracts
         run: make test-infra
+      - name: Verify offline release publication and digest checks
+        run: make test-release
 
   media-worker:
     runs-on: ubuntu-latest
@@ -44,6 +47,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: workers/media-processor/uv.lock
       - run: uv sync --project workers/media-processor --locked
+      - name: Check release tool formatting and lint
+        run: |
+          uv run --project workers/media-processor ruff check scripts/release_images.py scripts/test_release_images.py
+          uv run --project workers/media-processor ruff format --check scripts/release_images.py scripts/test_release_images.py
       - run: make test-worker
 
   api:
