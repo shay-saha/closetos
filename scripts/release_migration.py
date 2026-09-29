@@ -254,6 +254,20 @@ def task_identity(task, target, started_by, expected=None):
     return arn
 
 
+def request_identity(release, target):
+    token = hashlib.sha256(
+        json.dumps(
+            {
+                **release,
+                "definition": target["definition"],
+                "cluster": target["cluster"],
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    return token, "closetos-migration-" + token[:16]
+
+
 def run_migration(release, manifest, outputs, destination, timeout=900):
     require(
         30 <= timeout <= 1800, "Migration timeout must be between 30 and 1,800 seconds."
@@ -268,17 +282,7 @@ def run_migration(release, manifest, outputs, destination, timeout=900):
         "Migration result files already exist; use a fresh result destination.",
     )
     verify_prerequisites(release, manifest, target)
-    token = hashlib.sha256(
-        json.dumps(
-            {
-                **release,
-                "definition": target["definition"],
-                "cluster": target["cluster"],
-            },
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
-    started_by = "closetos-migration-" + token[:16]
+    token, started_by = request_identity(release, target)
     network = {
         "awsvpcConfiguration": {
             "subnets": target["subnets"],
