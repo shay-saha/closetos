@@ -28,6 +28,8 @@ class WorkflowReconcilerTest {
     private final JsonMapper json = JsonMapper.builder().build();
     private final SfnClient sfn = mock(SfnClient.class);
     private final WorkflowSlots slots = mock(WorkflowSlots.class);
+    private final AwsMediaTasks workers = mock(AwsMediaTasks.class);
+    private final MediaExecutionHistory history = mock(MediaExecutionHistory.class);
     private final ProcessingAccess processing = mock(ProcessingAccess.class);
     private final ProcessingTransitions transitions = mock(ProcessingTransitions.class);
     private final ProcessingResults results = mock(ProcessingResults.class);
@@ -35,7 +37,16 @@ class WorkflowReconcilerTest {
     private final SimpleMeterRegistry metrics = new SimpleMeterRegistry();
     private final WorkflowReconciler reconciler =
             new WorkflowReconciler(
-                    sfn, slots, processing, transitions, results, storage, json, metrics);
+                    sfn,
+                    slots,
+                    workers,
+                    history,
+                    processing,
+                    transitions,
+                    results,
+                    storage,
+                    json,
+                    metrics);
     private final WorkflowJob job = fixture();
 
     private WorkflowJob fixture() {
@@ -72,6 +83,8 @@ class WorkflowReconcilerTest {
     }
 
     private void status(ExecutionStatus status) {
+        when(history.inspect(anyString(), eq(status)))
+                .thenReturn(new MediaExecutionHistory.SubmissionHistory(java.util.Set.of(), true));
         when(sfn.describeExecution(any(DescribeExecutionRequest.class)))
                 .thenReturn(DescribeExecutionResponse.builder().status(status).build());
     }
@@ -79,6 +92,7 @@ class WorkflowReconcilerTest {
     @Test
     void runningAndUnknownExecutionsKeepTheirCapacityWithoutReadingPhotographs() {
         slot(true);
+        when(processing.context(job.jobId())).thenReturn(Optional.of(job));
         for (ExecutionStatus status :
                 new ExecutionStatus[] {
                     ExecutionStatus.RUNNING,
@@ -90,7 +104,8 @@ class WorkflowReconcilerTest {
             reconciler.reconcile();
         }
         verify(slots, never()).finished(any());
-        verifyNoInteractions(processing, transitions, results, storage);
+        verify(processing).context(job.jobId());
+        verifyNoInteractions(transitions, results, storage);
         verify(sfn, times(4))
                 .describeExecution(
                         argThat(
@@ -147,6 +162,85 @@ class WorkflowReconcilerTest {
         ordered.verify(storage).deletePrefix(job.imagePrefix());
         ordered.verify(slots).finished(job.jobId());
         verifyNoInteractions(results, transitions);
+    }
+
+    @Test
+    void aTerminalExecutionCannotPurgePhotographsWhileAWorkerIsStillRunning() {
+        slot(true);
+        status(ExecutionStatus.ABORTED);
+        String task =
+                "arn:aws:ecs:eu-west-2:123456789012:task/closetos-dev/0123456789abcdef0123456789abcdef";
+        when(slots.unconfirmedTasks(job.jobId())).thenReturn(java.util.Set.of(task));
+        when(workers.inspect(job.jobId(), java.util.Set.of(task), true))
+                .thenReturn(java.util.Map.of(task, false));
+        reconciler.reconcile();
+        verify(workers).inspect(job.jobId(), java.util.Set.of(task), true);
+        verify(slots, never()).finished(any());
+        verifyNoInteractions(storage, results, transitions, processing);
+        assertThat(metrics.get("processing.workflow.workers.pending").counter().count())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void storesWorkerStopConfirmationBeforePurgeAndCapacityRelease() {
+        slot(true);
+        status(ExecutionStatus.ABORTED);
+        String task =
+                "arn:aws:ecs:eu-west-2:123456789012:task/closetos-dev/0123456789abcdef0123456789abcdef";
+        when(slots.unconfirmedTasks(job.jobId()))
+                .thenReturn(java.util.Set.of(task), java.util.Set.of());
+        when(workers.inspect(job.jobId(), java.util.Set.of(task), true))
+                .thenReturn(java.util.Map.of(task, true));
+        reconciler.reconcile();
+        var ordered = inOrder(slots, storage);
+        ordered.verify(slots).taskStopped(job.jobId(), task);
+        ordered.verify(storage).deletePrefix(job.imagePrefix());
+        ordered.verify(slots).finished(job.jobId());
+    }
+
+    @Test
+    void ambiguousSubmissionsRetainCapacityEvenWhenTaskDiscoveryIsEmpty() {
+        slot(true);
+        status(ExecutionStatus.TIMED_OUT);
+        when(history.inspect(anyString(), eq(ExecutionStatus.TIMED_OUT)))
+                .thenReturn(new MediaExecutionHistory.SubmissionHistory(java.util.Set.of(), false));
+        reconciler.reconcile();
+        verify(slots, never()).finished(any());
+        verifyNoInteractions(storage, results, transitions, processing);
+    }
+
+    @Test
+    void failedWorkerInspectionRetainsCapacityWithoutPurgingPhotographs() {
+        slot(true);
+        status(ExecutionStatus.FAILED);
+        when(workers.discover(job.jobId()))
+                .thenThrow(new IllegalStateException("Worker unavailable"));
+        reconciler.reconcile();
+        verify(slots, never()).finished(any());
+        verifyNoInteractions(storage, results, transitions, processing);
+        assertThat(metrics.get("processing.workflow.reconciliation.failures").counter().count())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void requestsCancellationOfAnOrphanedRunningExecutionAndWaitsForAnotherObservation() {
+        slot(true);
+        status(ExecutionStatus.RUNNING);
+        reconciler.reconcile();
+        verify(sfn)
+                .stopExecution(
+                        argThat(
+                                (StopExecutionRequest request) ->
+                                        request.executionArn()
+                                                        .equals(
+                                                                MACHINE.replace(
+                                                                                ":stateMachine:",
+                                                                                ":execution:")
+                                                                        + ":"
+                                                                        + job.executionName())
+                                                && request.error().equals("MediaRemoved")));
+        verify(slots, never()).finished(any());
+        verifyNoInteractions(storage, results, transitions, history);
     }
 
     @Test

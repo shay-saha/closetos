@@ -54,7 +54,7 @@ class DatabaseMigrationTest {
 
     @Test
     void migratesAnEmptyDatabaseAndSafelyReplaysWithoutStartingSpring() throws Exception {
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(13);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(14);
         assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isZero();
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
                         statement.executeQuery(
                                 "SELECT count(*) FROM flyway_schema_history WHERE success")) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getInt(1)).isEqualTo(13);
+            assertThat(result.getInt(1)).isEqualTo(14);
         }
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -108,7 +108,7 @@ class DatabaseMigrationTest {
                         'arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:garment-image-00000000-0000-4000-8000-000000000004-pipeline-1-r1','PROCESSING_MEDIA',1)
                     """);
         }
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(4);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(5);
         try (var connection = connect();
                 var statement = connection.createStatement();
                 var result =
@@ -173,6 +173,19 @@ class DatabaseMigrationTest {
             statement.execute("SELECT * FROM expensive_action_policy");
             statement.execute("SELECT '[1,0,0]'::vector <=> '[0,1,0]'::vector");
             statement.execute("DELETE FROM garment");
+            statement.execute(
+                    """
+                    INSERT INTO workflow_slot(job_id,execution_arn,state_machine_arn,execution_name,payload)
+                    VALUES ('00000000-0000-4000-8000-000000000006','execution','machine','job','{}')
+                    """);
+            statement.execute(
+                    """
+                    INSERT INTO workflow_task(task_arn,job_id)
+                    VALUES ('arn:aws:ecs:eu-west-2:123456789012:task/closetos-dev/0123456789abcdef0123456789abcdef',
+                        '00000000-0000-4000-8000-000000000006')
+                    """);
+            statement.execute(
+                    "UPDATE workflow_task SET stopped_at = now() WHERE stopped_at IS NULL");
             for (String sql :
                     new String[] {
                         "CREATE TABLE injected(id integer)",
@@ -187,6 +200,10 @@ class DatabaseMigrationTest {
                         "DELETE FROM expensive_action_policy",
                         "DELETE FROM identity_authentication",
                         "DELETE FROM account_removal",
+                        "DELETE FROM workflow_task",
+                        "UPDATE workflow_task SET job_id = '00000000-0000-4000-8000-000000000007'",
+                        "UPDATE workflow_task SET task_arn = 'foreign'",
+                        "UPDATE workflow_task SET observed_at = now()",
                         "UPDATE identity_authentication SET subject_hash = repeat('0',64)",
                         "UPDATE account_removal SET requested_at = now()",
                         "UPDATE workflow_capacity SET maximum_active=16",
@@ -336,7 +353,7 @@ class DatabaseMigrationTest {
                             ownerPassword,
                             "APPLICATION_DATABASE_PASSWORD",
                             runtimePassword);
-            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(13);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(14);
             assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
             try (var connection =
                             DriverManager.getConnection(

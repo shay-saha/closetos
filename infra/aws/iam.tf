@@ -94,8 +94,32 @@ resource "aws_iam_role_policy" "api" {
       {
         Sid      = "ObserveMediaWorkflow"
         Effect   = "Allow"
-        Action   = ["states:DescribeExecution"]
+        Action   = ["states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution"]
         Resource = "arn:${local.partition}:states:${var.region}:${local.account_id}:execution:${local.name}-media:*"
+      },
+      {
+        Sid       = "FindMediaTasks"
+        Effect    = "Allow"
+        Action    = ["ecs:ListTasks"]
+        Resource  = "*"
+        Condition = { ArnEquals = { "ecs:cluster" = local.cluster_arn } }
+      },
+      {
+        Sid      = "ObserveMediaTasks"
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeTasks"]
+        Resource = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.name}/*"
+      },
+      {
+        Sid      = "StopMediaWorkersOnly"
+        Effect   = "Allow"
+        Action   = ["ecs:StopTask"]
+        Resource = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.name}/*"
+        Condition = { StringEquals = {
+          "aws:ResourceTag/Application"    = var.application_name
+          "aws:ResourceTag/Environment"    = var.environment
+          "aws:ResourceTag/ClosetosWorker" = "media"
+        } }
       },
       {
         Sid      = "ConsumeMediaEvents"
@@ -176,8 +200,31 @@ resource "aws_iam_role_policy" "workflow" {
       {
         Sid      = "MonitorMediaTasks"
         Effect   = "Allow"
-        Action   = ["ecs:DescribeTasks", "ecs:StopTask"]
+        Action   = ["ecs:DescribeTasks"]
         Resource = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.name}/*"
+      },
+      {
+        Sid      = "StopMediaWorkersOnly"
+        Effect   = "Allow"
+        Action   = ["ecs:StopTask"]
+        Resource = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.name}/*"
+        Condition = { StringEquals = {
+          "aws:ResourceTag/Application"    = var.application_name
+          "aws:ResourceTag/Environment"    = var.environment
+          "aws:ResourceTag/ClosetosWorker" = "media"
+        } }
+      },
+      {
+        Sid      = "TagNewMediaWorkers"
+        Effect   = "Allow"
+        Action   = ["ecs:TagResource"]
+        Resource = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:task/${local.name}/*"
+        Condition = { StringEquals = {
+          "ecs:CreateAction"              = "RunTask"
+          "aws:RequestTag/Application"    = var.application_name
+          "aws:RequestTag/Environment"    = var.environment
+          "aws:RequestTag/ClosetosWorker" = "media"
+        } }
       },
       {
         Sid       = "PassWorkerRolesOnly"

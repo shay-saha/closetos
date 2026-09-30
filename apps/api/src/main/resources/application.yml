@@ -54,6 +54,7 @@ closetos:
     bucket: ${MEDIA_BUCKET:closetos}
     workflow-mode: ${MEDIA_WORKFLOW_MODE:aws}
     state-machine-arn: ${MEDIA_STATE_MACHINE_ARN:}
+    cluster-arn: ${MEDIA_CLUSTER_ARN:}
     dispatch-enabled: ${MEDIA_DISPATCH_ENABLED:false}
     aws-consumer-enabled: ${MEDIA_AWS_CONSUMER_ENABLED:false}
     ingest-queue-url: ${MEDIA_INGEST_QUEUE_URL:}

@@ -66,10 +66,17 @@ locals {
         Resource       = "arn:${local.partition}:states:::ecs:runTask.sync"
         TimeoutSeconds = 900
         Parameters = {
-          Cluster              = aws_ecs_cluster.application.arn
-          TaskDefinition       = aws_ecs_task_definition.media[0].arn
-          LaunchType           = "FARGATE"
-          PlatformVersion      = "1.4.0"
+          Cluster         = aws_ecs_cluster.application.arn
+          TaskDefinition  = aws_ecs_task_definition.media[0].arn
+          LaunchType      = "FARGATE"
+          PlatformVersion = "1.4.0"
+          "StartedBy.$"   = "$.job.jobId"
+          Tags = [
+            { Key = "Application", Value = var.application_name },
+            { Key = "Environment", Value = var.environment },
+            { Key = "ClosetosWorker", Value = "media" },
+            { Key = "ClosetosJob", "Value.$" = "$.job.jobId" }
+          ]
           NetworkConfiguration = local.workflow_network
           Overrides = {
             ContainerOverrides = [{
@@ -89,10 +96,17 @@ locals {
         Resource       = "arn:${local.partition}:states:::ecs:runTask.sync"
         TimeoutSeconds = 600
         Parameters = {
-          Cluster              = aws_ecs_cluster.application.arn
-          TaskDefinition       = aws_ecs_task_definition.media[0].arn
-          LaunchType           = "FARGATE"
-          PlatformVersion      = "1.4.0"
+          Cluster         = aws_ecs_cluster.application.arn
+          TaskDefinition  = aws_ecs_task_definition.media[0].arn
+          LaunchType      = "FARGATE"
+          PlatformVersion = "1.4.0"
+          "StartedBy.$"   = "$.job.jobId"
+          Tags = [
+            { Key = "Application", Value = var.application_name },
+            { Key = "Environment", Value = var.environment },
+            { Key = "ClosetosWorker", Value = "media" },
+            { Key = "ClosetosJob", "Value.$" = "$.job.jobId" }
+          ]
           NetworkConfiguration = local.workflow_network
           Overrides = {
             ContainerOverrides = [{

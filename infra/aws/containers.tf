@@ -45,6 +45,7 @@ locals {
     MEDIA_BUCKET                                       = aws_s3_bucket.media.id
     MEDIA_WORKFLOW_MODE                                = "aws"
     MEDIA_STATE_MACHINE_ARN                            = local.workflow_arn
+    MEDIA_CLUSTER_ARN                                  = local.cluster_arn
     MEDIA_DISPATCH_ENABLED                             = "true"
     MEDIA_AWS_CONSUMER_ENABLED                         = "true"
     MEDIA_INGEST_QUEUE_URL                             = aws_sqs_queue.media["media-ingest"].url

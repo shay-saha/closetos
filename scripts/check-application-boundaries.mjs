@@ -42,6 +42,11 @@ export function checkApplicationBoundaries(resources) {
   const context = {
     "aws:ResourceTag/Application": application,
     "aws:ResourceTag/Environment": environment,
+    "aws:ResourceTag/ClosetosWorker": "media",
+    "aws:RequestTag/Application": application,
+    "aws:RequestTag/Environment": environment,
+    "aws:RequestTag/ClosetosWorker": "media",
+    "ecs:CreateAction": "RunTask",
     "ecs:cluster": `arn:aws:ecs:${region}:${account}:cluster/${name}`,
     "iam:PassedToService": "ecs-tasks.amazonaws.com",
     "s3:prefix": "users/owner/garments/garment/images/photo/",
@@ -195,6 +200,51 @@ export function checkApplicationBoundaries(resources) {
     ...context,
     "ecs:cluster": `arn:aws:ecs:${region}:${account}:cluster/${otherName}`,
   });
+  const task = `arn:aws:ecs:${region}:${account}:task/${name}/0123456789abcdef0123456789abcdef`;
+  for (const role of roles) {
+    expect(role, "ecs:StopTask", task, ["api-task", "media-workflow"].includes(role));
+    expect(role, "ecs:StopTask", task, false, {});
+    expect(role, "ecs:StopTask", task, false, {
+      ...context,
+      "aws:ResourceTag/ClosetosWorker": "api",
+    });
+    expect(role, "ecs:StopTask", task, false, {
+      ...context,
+      "aws:ResourceTag/Environment": "other",
+    });
+    expect(role, "ecs:StopTask", task, false, {
+      ...context,
+      "aws:ResourceTag/Application": "other",
+    });
+    expect(role, "ecs:StopTask", task.replace(name, otherName), false);
+    expect(role, "ecs:StopTask", task.replace(account, "999999999999"), false);
+    expect(role, "ecs:TagResource", task, role === "media-workflow");
+    expect(role, "ecs:TagResource", task, false, {
+      ...context,
+      "ecs:CreateAction": "RegisterTaskDefinition",
+    });
+    expect(role, "ecs:TagResource", task, false, { ...context, "ecs:CreateAction": undefined });
+    expect(role, "ecs:TagResource", task, false, {
+      ...context,
+      "aws:RequestTag/ClosetosWorker": "web",
+    });
+    expect(role, "ecs:UntagResource", task, false);
+  }
+  expect("api-task", "ecs:ListTasks", "*", true);
+  expect("api-task", "ecs:ListTasks", "*", false, {});
+  expect("api-task", "ecs:ListTasks", "*", false, {
+    ...context,
+    "ecs:cluster": context["ecs:cluster"].replace(name, otherName),
+  });
+  for (const action of [
+    "states:DescribeExecution",
+    "states:GetExecutionHistory",
+    "states:StopExecution",
+  ]) {
+    const execution = machine.replace(":stateMachine:", ":execution:") + ":job";
+    expect("api-task", action, execution, true);
+    expect("api-task", action, execution.replace(name, otherName), false);
+  }
   for (const role of ["media-worker-task", "media-worker-execution"]) {
     expect("media-workflow", "iam:PassRole", roleArn(role), true);
     expect("media-workflow", "iam:PassRole", roleArn(role), false, {
@@ -241,6 +291,37 @@ export function checkBoundedApplicationRoles(resources, metadata) {
               ? "migration-execution"
               : `${/\["([^"]+)"\]$/.exec(resource.address)[1]}-execution`;
     const policy = JSON.parse(resource.values.policy);
+    if (["api-task", "media-workflow"].includes(role)) {
+      const task = `arn:aws:ecs:${metadata.region}:${account}:task/${name}/0123456789abcdef0123456789abcdef`;
+      for (const deniedContext of [
+        {},
+        { ...context, "aws:ResourceTag/ClosetosWorker": "api" },
+        { ...context, "aws:ResourceTag/Environment": "another-environment" },
+        { ...context, "aws:ResourceTag/Application": "another-application" },
+      ]) {
+        assert(
+          !iamPermission([policy], "ecs:StopTask", task, deniedContext),
+          `${role}: identity policy may stop only tagged media workers`,
+        );
+        checks++;
+      }
+      assert(
+        !iamPermission([policy], "ecs:StopTask", task.replace(account, "999999999999"), context),
+      );
+      checks++;
+      if (role === "media-workflow") {
+        for (const createAction of [undefined, "RegisterTaskDefinition"]) {
+          assert(
+            !iamPermission([policy], "ecs:TagResource", task, {
+              ...context,
+              "ecs:CreateAction": createAction,
+            }),
+            "The workflow may tag tasks only during RunTask",
+          );
+          checks++;
+        }
+      }
+    }
     for (const statement of policy.Statement) {
       assert.equal(statement.Effect, "Allow");
       const suppliedContext = { ...context };

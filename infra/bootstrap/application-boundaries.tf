@@ -97,7 +97,20 @@ locals {
           Condition = { StringLike = { "s3:prefix" = "users/*/garments/*/images/*/" } }
         },
         { Effect = "Allow", Action = ["states:StartExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:stateMachine:${local.boundary_name}-media" },
-        { Effect = "Allow", Action = ["states:DescribeExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:execution:${local.boundary_name}-media:*" },
+        { Effect = "Allow", Action = ["states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:execution:${local.boundary_name}-media:*" },
+        {
+          Effect    = "Allow", Action = ["ecs:ListTasks"], Resource = "*"
+          Condition = { ArnEquals = { "ecs:cluster" = local.boundary_cluster } }
+        },
+        { Effect = "Allow", Action = ["ecs:DescribeTasks"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*" },
+        {
+          Effect = "Allow", Action = ["ecs:StopTask"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*"
+          Condition = { StringEquals = {
+            "aws:ResourceTag/Application"    = var.application_name
+            "aws:ResourceTag/Environment"    = var.environment
+            "aws:ResourceTag/ClosetosWorker" = "media"
+          } }
+        },
         { Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = local.boundary_queues },
         local.boundary_encryption,
         { Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.embedding_model_arn }
@@ -126,7 +139,24 @@ locals {
           Resource  = "arn:aws:ecs:${var.region}:${local.boundary_account}:task-definition/${local.boundary_name}-media:*"
           Condition = { ArnEquals = { "ecs:cluster" = local.boundary_cluster } }
         },
-        { Effect = "Allow", Action = ["ecs:DescribeTasks", "ecs:StopTask"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*" },
+        { Effect = "Allow", Action = ["ecs:DescribeTasks"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*" },
+        {
+          Effect = "Allow", Action = ["ecs:StopTask"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*"
+          Condition = { StringEquals = {
+            "aws:ResourceTag/Application"    = var.application_name
+            "aws:ResourceTag/Environment"    = var.environment
+            "aws:ResourceTag/ClosetosWorker" = "media"
+          } }
+        },
+        {
+          Effect = "Allow", Action = ["ecs:TagResource"], Resource = "arn:aws:ecs:${var.region}:${local.boundary_account}:task/${local.boundary_name}/*"
+          Condition = { StringEquals = {
+            "ecs:CreateAction"              = "RunTask"
+            "aws:RequestTag/Application"    = var.application_name
+            "aws:RequestTag/Environment"    = var.environment
+            "aws:RequestTag/ClosetosWorker" = "media"
+          } }
+        },
         {
           Effect    = "Allow"
           Action    = ["iam:PassRole"]

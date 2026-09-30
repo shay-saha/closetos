@@ -54,3 +54,6 @@ GRANT SELECT, INSERT ON TABLE identity_authentication, account_removal TO closet
 GRANT UPDATE (revoked) ON TABLE identity_authentication TO closetos_app;
 GRANT UPDATE (owner_id, provider_subject, state, next_attempt_at, lease_until, attempt_count, failure_code, completed_at)
     ON TABLE account_removal TO closetos_app;
+
+GRANT SELECT, INSERT ON TABLE workflow_task TO closetos_app;
+GRANT UPDATE (stopped_at) ON TABLE workflow_task TO closetos_app;

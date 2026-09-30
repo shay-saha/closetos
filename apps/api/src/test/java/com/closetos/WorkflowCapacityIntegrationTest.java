@@ -176,6 +176,54 @@ class WorkflowCapacityIntegrationTest extends PostgresIntegrationTest {
                 .isZero();
     }
 
+    @Test
+    void rememberedWorkersSurviveReplicaChangesAndCannotBeReleasedUntilConfirmedStopped() {
+        var job = job();
+        firstReplica.reserve(job, MACHINE);
+        String task =
+                "arn:aws:ecs:eu-west-2:123456789012:task/closetos-dev/0123456789abcdef0123456789abcdef";
+        firstReplica.rememberTasks(job.jobId(), Set.of(task));
+        secondReplica.rememberTasks(job.jobId(), Set.of(task));
+        secondReplica.finished(job.jobId());
+        assertThat(firstReplica.count()).isEqualTo(1);
+        assertThat(secondReplica.unconfirmedTasks(job.jobId())).containsExactly(task);
+        secondReplica.taskStopped(UUID.randomUUID(), task);
+        assertThat(firstReplica.unconfirmedTasks(job.jobId())).containsExactly(task);
+        firstReplica.taskStopped(job.jobId(), task);
+        secondReplica.rememberTasks(job.jobId(), Set.of(task));
+        assertThat(secondReplica.unconfirmedTasks(job.jobId())).isEmpty();
+        assertThatThrownBy(
+                        () ->
+                                jdbc.sql(
+                                                "UPDATE workflow_task SET stopped_at = NULL WHERE task_arn = :arn")
+                                        .param("arn", task)
+                                        .update())
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        secondReplica.finished(job.jobId());
+        assertThat(firstReplica.count()).isZero();
+        assertThat(
+                        jdbc.sql("SELECT count(*) FROM workflow_task WHERE task_arn = :arn")
+                                .param("arn", task)
+                                .query(Integer.class)
+                                .single())
+                .isZero();
+    }
+
+    @Test
+    void aWorkerCannotBeReassignedToAnotherReservation() {
+        var first = job();
+        var second = job();
+        firstReplica.reserve(first, MACHINE);
+        secondReplica.reserve(second, MACHINE);
+        String task =
+                "arn:aws:ecs:eu-west-2:123456789012:task/closetos-dev/abcdef0123456789abcdef0123456789";
+        firstReplica.rememberTasks(first.jobId(), Set.of(task));
+        assertThatThrownBy(() -> secondReplica.rememberTasks(second.jobId(), Set.of(task)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(secondReplica.unconfirmedTasks(first.jobId())).containsExactly(task);
+        assertThat(firstReplica.unconfirmedTasks(second.jobId())).isEmpty();
+    }
+
     private String arn(WorkflowJob job) {
         return MACHINE.replace(":stateMachine:", ":execution:") + ":" + job.executionName();
     }

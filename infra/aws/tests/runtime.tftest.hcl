@@ -113,6 +113,15 @@ run "development_runtime_contract" {
     error_message = "Run transform and enrichment separately and retain the original job across ECS completion responses."
   }
   assert {
+    condition = alltrue([for stage in ["RunMediaTransform", "RunAIEnrichment"] :
+      jsondecode(aws_sfn_state_machine.media[0].definition).States[stage].Parameters["StartedBy.$"] == "$.job.jobId" &&
+      { for tag in jsondecode(aws_sfn_state_machine.media[0].definition).States[stage].Parameters.Tags : tag.Key => try(tag.Value, tag["Value.$"]) } == {
+        Application = "closetos", Environment = "dev", ClosetosWorker = "media", ClosetosJob = "$.job.jobId"
+      }
+    ])
+    error_message = "Both worker stages and retries must carry their job identity and environment-scoped cancellation tags."
+  }
+  assert {
     condition     = jsondecode(aws_sfn_state_machine.media[0].definition).States.RunMediaTransform.Parameters.NetworkConfiguration.AwsvpcConfiguration.AssignPublicIp == "DISABLED" && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunMediaTransform.Parameters.Overrides.ContainerOverrides[0].Environment[0]["Value.$"] == "States.JsonToString($.job)" && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunAIEnrichment.Catch[0].Next == "PrepareProcessingFailure" && !contains(jsondecode(aws_sfn_state_machine.media[0].definition).States.RunAIEnrichment.Retry[0].ErrorEquals, "States.TaskFailed")
     error_message = "Pass only the validated job to private tasks and publish failures without repeatedly running invalid media or inference."
   }
