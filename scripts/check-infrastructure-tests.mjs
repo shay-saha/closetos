@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import validateWorkflow from "asl-validator";
+import { checkInfrastructureAccess } from "./check-infrastructure-access.mjs";
 import { checkPlanningAccess } from "./check-planning-access.mjs";
 import {
   checkApplicationBoundaries,
@@ -21,6 +22,12 @@ export const planningScenarios = [
   "planning_supports_custom_application_account_and_region",
 ];
 
+export const infrastructureScenarios = [
+  "development_infrastructure_changes",
+  "production_infrastructure_requires_environment_approval",
+  "infrastructure_supports_custom_application_account_and_region",
+];
+
 export const applicationBoundaryScenarios = [
   "development_application_boundaries",
   "production_application_boundaries",
@@ -32,6 +39,7 @@ export async function checkInfrastructureTests(
   {
     requiredWorkflows = [],
     requiredPlanners = [],
+    requiredInfrastructure = [],
     requiredBoundaries = [],
     requiredBoundedRoles = [],
     report = console.log,
@@ -43,6 +51,7 @@ export async function checkInfrastructureTests(
   });
   const workflows = new Set();
   const planners = new Set();
+  const infrastructure = new Set();
   const boundaryScenarios = new Set();
   const boundedRoles = new Set();
   let boundaries;
@@ -78,6 +87,11 @@ export async function checkInfrastructureTests(
       report(
         `${event["@testrun"]}: ${checks} runtime identity-policy operations remain within their bootstrap boundaries`,
       );
+    }
+    if (requiredInfrastructure.includes(event["@testrun"])) {
+      const checks = checkInfrastructureAccess(renderedResources);
+      infrastructure.add(event["@testrun"]);
+      report(`${event["@testrun"]}: ${checks} rendered infrastructure permission checks pass`);
     }
     if (requiredPlanners.includes(event["@testrun"])) {
       const checks = checkPlanningAccess(event.test_state.root_module?.resources ?? []);
@@ -125,6 +139,13 @@ export async function checkInfrastructureTests(
       `Workflow validation failed${missing.length ? `; missing: ${missing.join(", ")}` : ""}`,
     );
   }
+  const missingInfrastructure = requiredInfrastructure.filter(
+    (scenario) => !infrastructure.has(scenario),
+  );
+  if (missingInfrastructure.length)
+    throw new Error(
+      `Missing rendered infrastructure access scenarios: ${missingInfrastructure.join(", ")}`,
+    );
   const missingPlanners = requiredPlanners.filter((scenario) => !planners.has(scenario));
   if (missingPlanners.length) {
     throw new Error(`Missing rendered planning scenarios: ${missingPlanners.join(", ")}`);
@@ -151,6 +172,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     try {
       await checkInfrastructureTests(filename, {
         requiredWorkflows: module === "aws" ? runtimeScenarios : [],
+        requiredInfrastructure: module === "bootstrap" ? infrastructureScenarios : [],
         requiredPlanners: module === "bootstrap" ? planningScenarios : [],
         requiredBoundaries: module === "bootstrap" ? applicationBoundaryScenarios : [],
         requiredBoundedRoles: module === "aws" ? boundedRoleScenarios : [],

@@ -27,6 +27,7 @@ resource "aws_iam_role_policy" "migration_execution" {
 }
 resource "aws_ecs_task_definition" "migration" {
   count                    = local.runtime_enabled ? 1 : 0
+  skip_destroy             = true
   family                   = "${local.name}-migration"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"

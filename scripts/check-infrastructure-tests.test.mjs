@@ -27,6 +27,7 @@ async function verify(
   requiredPlanners = [],
   requiredBoundaries = [],
   requiredBoundedRoles = [],
+  requiredInfrastructure = [],
 ) {
   const directory = await mkdtemp(join(tmpdir(), "closetos-workflow-gate-"));
   try {
@@ -37,6 +38,7 @@ async function verify(
       requiredPlanners,
       requiredBoundaries,
       requiredBoundedRoles,
+      requiredInfrastructure,
       report: () => {},
     });
   } finally {
@@ -121,4 +123,11 @@ test("rejects incomplete, failed and skipped Terraform runs", async () => {
       /did not finish/,
     );
   }
+});
+
+test("rejects successful Terraform logs without infrastructure apply permission evidence", async () => {
+  await assert.rejects(
+    verify([success], [], [], [], [], ["development_infrastructure_changes"]),
+    /Missing rendered infrastructure access scenarios: development_infrastructure_changes/,
+  );
 });

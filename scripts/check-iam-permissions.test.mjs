@@ -179,3 +179,110 @@ test("unsupported conditions and inverse policy elements fail instead of grantin
     );
   }
 });
+
+test("IfExists permits omitted update fields but rejects explicitly unsafe values", () => {
+  const policies = policy([
+    {
+      Effect: "Allow",
+      Action: "ecs:UpdateService",
+      Resource: "*",
+      Condition: {
+        ArnLikeIfExists: {
+          "ecs:task-definition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/dev-api:*",
+        },
+        BoolIfExists: { "ecs:enable-execute-command": "false" },
+      },
+    },
+  ]);
+  assert(iamPermission(policies, "ecs:UpdateService", "*"));
+  assert(
+    iamPermission(policies, "ecs:UpdateService", "*", { "ecs:enable-execute-command": false }),
+  );
+  assert(
+    !iamPermission(policies, "ecs:UpdateService", "*", { "ecs:enable-execute-command": true }),
+  );
+  assert(
+    !iamPermission(policies, "ecs:UpdateService", "*", {
+      "ecs:task-definition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/prod-api:1",
+    }),
+  );
+});
+
+test("set conditions validate every member and Null prevents vacuous grants", () => {
+  const entry = {
+    Effect: "Allow",
+    Action: "route53:ChangeResourceRecordSets",
+    Resource: "*",
+    Condition: { "ForAllValues:StringEquals": { names: ["closet.example.test"] } },
+  };
+  assert(iamPermission(policy([entry]), "route53:ChangeResourceRecordSets", "*"));
+  entry.Condition.Null = { names: "false" };
+  for (const context of [
+    {},
+    { names: [] },
+    { names: null },
+    { names: ["closet.example.test", "foreign.example.test"] },
+  ]) {
+    assert(!iamPermission(policy([entry]), "route53:ChangeResourceRecordSets", "*", context));
+  }
+  assert(
+    iamPermission(policy([entry]), "route53:ChangeResourceRecordSets", "*", {
+      names: ["closet.example.test"],
+    }),
+  );
+});
+
+test("ownership guards deny protected tag changes without denying unrelated metadata", () => {
+  const policies = policy([
+    { Effect: "Allow", Action: ["iam:TagRole", "iam:UntagRole"], Resource: "*" },
+    {
+      Effect: "Deny",
+      Action: "iam:TagRole",
+      Resource: "*",
+      Condition: {
+        Null: { "aws:RequestTag/Environment": "false" },
+        StringNotEquals: { "aws:RequestTag/Environment": "dev" },
+      },
+    },
+    {
+      Effect: "Deny",
+      Action: "iam:UntagRole",
+      Resource: "*",
+      Condition: {
+        "ForAnyValue:StringEquals": { "aws:TagKeys": ["Application", "Environment"] },
+      },
+    },
+  ]);
+  assert(iamPermission(policies, "iam:TagRole", "*", { "aws:RequestTag/Name": "label" }));
+  assert(iamPermission(policies, "iam:TagRole", "*", { "aws:RequestTag/Environment": "dev" }));
+  assert(!iamPermission(policies, "iam:TagRole", "*", { "aws:RequestTag/Environment": "prod" }));
+  assert(iamPermission(policies, "iam:UntagRole", "*", { "aws:TagKeys": ["Name"] }));
+  assert(
+    !iamPermission(policies, "iam:UntagRole", "*", { "aws:TagKeys": ["Name", "Environment"] }),
+  );
+});
+
+test("inverse resource denials override additional resource-based grants", () => {
+  const allow = {
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Action: "s3:GetObject", Resource: "*" }],
+  };
+  const deny = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Deny",
+        Action: "s3:GetObject",
+        NotResource: ["arn:aws:s3:::state/dev/state", "arn:aws:s3:::state/dev/state.tflock"],
+      },
+    ],
+  };
+  for (const policies of [
+    [allow, deny],
+    [deny, allow],
+  ]) {
+    assert(iamPermission(policies, "s3:GetObject", "arn:aws:s3:::state/dev/state"));
+    assert(!iamPermission(policies, "s3:GetObject", "arn:aws:s3:::media/users/owner/photo.jpg"));
+    assert(!iamPermission(policies, "s3:GetObject", "arn:aws:s3:::state/prod/state"));
+  }
+});

@@ -68,7 +68,7 @@ run "prepare_new_images_without_releasing_them" {
     error_message = "Expose the desired workflow separately while the active workflow keeps the previous worker until the release gate."
   }
   assert {
-    condition     = alltrue([for task in aws_ecs_task_definition.service : task.skip_destroy]) && aws_ecs_task_definition.media[0].skip_destroy && alltrue([for service in aws_ecs_service.application : service.desired_count == 0])
+    condition     = alltrue([for task in aws_ecs_task_definition.service : task.skip_destroy]) && aws_ecs_task_definition.media[0].skip_destroy && aws_ecs_task_definition.migration[0].skip_destroy && alltrue([for service in aws_ecs_service.application : service.desired_count == 0])
     error_message = "Keep rollback task definitions registered and never start tasks during release preparation."
   }
 }

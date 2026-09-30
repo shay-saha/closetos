@@ -60,6 +60,25 @@ PROTECTED_RESOURCES = frozenset(
         "aws_cloudfront_public_key",
         "aws_ecs_service",
         "aws_sfn_state_machine",
+        "aws_service_discovery_private_dns_namespace",
+    }
+)
+FOUNDATION_ADMIN_RESOURCES = frozenset(
+    {
+        "aws_cloudfront_public_key",
+        "aws_cloudfront_key_group",
+        "aws_cloudfront_origin_access_control",
+        "aws_secretsmanager_secret",
+        "aws_db_instance",
+        "aws_db_subnet_group",
+        "aws_db_parameter_group",
+        "aws_s3_bucket",
+        "aws_ecr_repository",
+        "aws_sqs_queue",
+        "aws_kms_key",
+        "aws_cognito_user_pool",
+        "aws_cloudfront_distribution",
+        "aws_ecs_cluster",
     }
 )
 SCALING_RESOURCES = frozenset(
@@ -370,6 +389,43 @@ def inspect_plan(plan, stage, release=None):
             isinstance(before, dict) and isinstance(after, dict),
             "Terraform reported invalid resource values.",
         )
+        require(
+            not (kind in FOUNDATION_ADMIN_RESOURCES and "create" in actions),
+            "Initialize the environment foundation before preparing a release.",
+        )
+        require(
+            kind
+            not in {
+                "aws_cloudfront_public_key",
+                "aws_cloudfront_key_group",
+                "aws_cloudfront_origin_access_control",
+            }
+            or actions in [["no-op"], ["read"]],
+            "CloudFront signing foundation changes require account administration because their write APIs cannot be safely scoped to an environment.",
+        )
+        if kind == "aws_cognito_user_pool_client":
+            require(
+                after.get("generate_secret") is not True,
+                "Browser authentication clients must not generate credentials in Terraform state.",
+            )
+        if kind == "aws_db_instance":
+            require(
+                all(after.get(key) in [None, ""] for key in ["password", "password_wo"])
+                and after.get("manage_master_user_password") is not False
+                and not any(
+                    change.get("after_unknown", {}).get(key)
+                    for key in ["password", "password_wo"]
+                ),
+                "Database credentials must remain AWS-managed and outside Terraform state.",
+            )
+        if kind == "aws_secretsmanager_secret" and before:
+            require(
+                all(
+                    before.get(key) == after.get(key)
+                    for key in ["name", "description", "kms_key_id"]
+                ),
+                "Prepare credential containers in the foundation; infrastructure deployment may update only their tags and retention settings.",
+            )
         if resource.get("mode") == "managed" and str(kind).startswith("aws_iam_"):
             require(
                 kind in {"aws_iam_role", "aws_iam_role_policy"},
@@ -384,14 +440,12 @@ def inspect_plan(plan, stage, release=None):
         if kind == "aws_ecs_task_definition":
             if "delete" in actions:
                 require(
-                    before.get("skip_destroy") is True
-                    or str(before.get("family", "")).endswith("-migration"),
+                    before.get("skip_destroy") is True,
                     "Retain existing task definitions before planning their replacement for rollback.",
                 )
             if "delete" not in actions or "create" in actions:
                 require(
-                    after.get("skip_destroy") is True
-                    or str(after.get("family", "")).endswith("-migration"),
+                    after.get("skip_destroy") is True,
                     "Release task definitions must remain registered for rollback.",
                 )
             for values in [before, after]:

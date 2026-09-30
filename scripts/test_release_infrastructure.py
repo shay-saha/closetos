@@ -624,7 +624,7 @@ class ReleaseInfrastructureTest(unittest.TestCase):
         self.assertEqual(
             len(infrastructure.inspect_plan(plan(change_set), "prepare")), 1
         )
-        migration = {"family": "closetos-dev-migration", "skip_destroy": False}
+        migration = {"family": "closetos-dev-migration", "skip_destroy": True}
         self.assertEqual(
             len(
                 infrastructure.inspect_plan(
@@ -643,6 +643,166 @@ class ReleaseInfrastructureTest(unittest.TestCase):
             ),
             1,
         )
+
+    def test_foundation_creation_and_signing_changes_require_administration(self):
+        for kind in infrastructure.FOUNDATION_ADMIN_RESOURCES:
+            with (
+                self.subTest(kind=kind),
+                self.assertRaisesRegex(
+                    images.ReleaseError, "Initialize the environment foundation"
+                ),
+            ):
+                infrastructure.inspect_plan(
+                    plan([change(kind, None, {}, ["create"])]), "prepare"
+                )
+        for kind in [
+            "aws_cloudfront_public_key",
+            "aws_cloudfront_key_group",
+            "aws_cloudfront_origin_access_control",
+        ]:
+            with (
+                self.subTest(kind=kind),
+                self.assertRaisesRegex(images.ReleaseError, "account administration"),
+            ):
+                infrastructure.inspect_plan(
+                    plan([change(kind, {"name": "old"}, {"name": "new"})]), "prepare"
+                )
+            self.assertEqual(
+                infrastructure.inspect_plan(
+                    plan([change(kind, {"name": "old"}, {"name": "old"}, ["no-op"])]),
+                    "prepare",
+                ),
+                [],
+            )
+
+    def test_infrastructure_cannot_change_credential_container_configuration(self):
+        before = {
+            "name": "closetos-dev/database-app",
+            "description": "App database",
+            "kms_key_id": "key-1",
+            "tags": {"Environment": "dev"},
+        }
+        for key, value in [
+            ("name", "foreign"),
+            ("description", "changed"),
+            ("kms_key_id", "key-2"),
+        ]:
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(images.ReleaseError, "credential containers"),
+            ):
+                infrastructure.inspect_plan(
+                    plan(
+                        [
+                            change(
+                                "aws_secretsmanager_secret",
+                                before,
+                                {**before, key: value},
+                            )
+                        ]
+                    ),
+                    "prepare",
+                )
+        after = {
+            **before,
+            "tags": {"Environment": "dev", "Name": "database"},
+            "recovery_window_in_days": 30,
+        }
+        self.assertEqual(
+            len(
+                infrastructure.inspect_plan(
+                    plan([change("aws_secretsmanager_secret", before, after)]),
+                    "prepare",
+                )
+            ),
+            1,
+        )
+
+    def test_migration_revisions_must_also_remain_registered(self):
+        for actions, before, after in [
+            (
+                ["delete", "create"],
+                {"family": "closetos-dev-migration", "skip_destroy": False},
+                {"skip_destroy": True},
+            ),
+            (
+                ["create"],
+                None,
+                {"family": "closetos-dev-migration", "skip_destroy": False},
+            ),
+        ]:
+            with (
+                self.subTest(actions=actions),
+                self.assertRaisesRegex(images.ReleaseError, "task definitions"),
+            ):
+                infrastructure.inspect_plan(
+                    plan([change("aws_ecs_task_definition", before, after, actions)]),
+                    "prepare",
+                )
+
+    def test_release_plans_cannot_create_database_or_browser_credentials(self):
+        for resource in [
+            change(
+                "aws_cognito_user_pool_client",
+                None,
+                {"generate_secret": True},
+                ["create"],
+            ),
+            change(
+                "aws_db_instance",
+                {"manage_master_user_password": True},
+                {"manage_master_user_password": False},
+            ),
+            change("aws_db_instance", {}, {"password": "credential"}),
+            change("aws_db_instance", {}, {"password_wo": "credential"}),
+        ]:
+            with (
+                self.subTest(kind=resource["type"]),
+                self.assertRaisesRegex(images.ReleaseError, "credentials"),
+            ):
+                infrastructure.inspect_plan(plan([resource]), "prepare")
+        resource = change("aws_db_instance", {}, {})
+        resource["change"]["after_unknown"] = {"password": True}
+        with self.assertRaisesRegex(images.ReleaseError, "credentials"):
+            infrastructure.inspect_plan(plan([resource]), "prepare")
+        infrastructure.inspect_plan(
+            plan(
+                [
+                    change(
+                        "aws_db_instance",
+                        {},
+                        {
+                            "manage_master_user_password": True,
+                            "password": None,
+                            "password_wo": None,
+                        },
+                    )
+                ]
+            ),
+            "prepare",
+        )
+        infrastructure.inspect_plan(
+            plan(
+                [change("aws_cognito_user_pool_client", {}, {"generate_secret": False})]
+            ),
+            "prepare",
+        )
+
+    def test_private_service_discovery_namespace_cannot_be_replaced(self):
+        with self.assertRaisesRegex(images.ReleaseError, "protected application"):
+            infrastructure.inspect_plan(
+                plan(
+                    [
+                        change(
+                            "aws_service_discovery_private_dns_namespace",
+                            {"id": "ns-old"},
+                            {"id": "ns-new"},
+                            ["delete", "create"],
+                        )
+                    ]
+                ),
+                "prepare",
+            )
 
     def test_scaling_waits_for_a_bound_successful_rollout_and_rejects_unrelated_drift(
         self,
