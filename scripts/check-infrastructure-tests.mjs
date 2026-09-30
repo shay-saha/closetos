@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import validateWorkflow from "asl-validator";
+import { checkPlanningAccess } from "./check-planning-access.mjs";
 
 export const runtimeScenarios = [
   "runtime_preparation_keeps_services_stopped",
@@ -10,15 +11,22 @@ export const runtimeScenarios = [
   "production_runtime_redundancy",
 ];
 
+export const planningScenarios = [
+  "development_infrastructure_planning",
+  "production_planning_precedes_environment_approval",
+  "planning_supports_custom_application_account_and_region",
+];
+
 export async function checkInfrastructureTests(
   filename,
-  { requiredWorkflows = [], report = console.log } = {},
+  { requiredWorkflows = [], requiredPlanners = [], report = console.log } = {},
 ) {
   const lines = createInterface({
     input: createReadStream(filename),
     crlfDelay: Infinity,
   });
   const workflows = new Set();
+  const planners = new Set();
   const diagnostics = [];
   let summary;
   let failedWorkflow = false;
@@ -31,6 +39,11 @@ export async function checkInfrastructureTests(
     if (event.type === "diagnostic") diagnostics.push(event.diagnostic);
     if (event.type === "test_summary") summary = event.test_summary;
     if (event.type !== "test_state") continue;
+    if (requiredPlanners.includes(event["@testrun"])) {
+      const checks = checkPlanningAccess(event.test_state.root_module?.resources ?? []);
+      planners.add(event["@testrun"]);
+      report(`${event["@testrun"]}: ${checks} rendered planner permission checks pass`);
+    }
     for (const resource of event.test_state.root_module?.resources ?? []) {
       if (resource.type !== "aws_sfn_state_machine") continue;
       const result = validateWorkflow(JSON.parse(resource.values.definition));
@@ -72,6 +85,10 @@ export async function checkInfrastructureTests(
       `Workflow validation failed${missing.length ? `; missing: ${missing.join(", ")}` : ""}`,
     );
   }
+  const missingPlanners = requiredPlanners.filter((scenario) => !planners.has(scenario));
+  if (missingPlanners.length) {
+    throw new Error(`Missing rendered planning scenarios: ${missingPlanners.join(", ")}`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -85,6 +102,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     try {
       await checkInfrastructureTests(filename, {
         requiredWorkflows: module === "aws" ? runtimeScenarios : [],
+        requiredPlanners: module === "bootstrap" ? planningScenarios : [],
       });
     } catch (error) {
       console.error(error.message);

@@ -21,12 +21,16 @@ const workflow = (definition) => ({
   },
 });
 
-async function verify(events, requiredWorkflows = ["runtime"]) {
+async function verify(events, requiredWorkflows = ["runtime"], requiredPlanners = []) {
   const directory = await mkdtemp(join(tmpdir(), "closetos-workflow-gate-"));
   try {
     const filename = join(directory, "terraform.jsonl");
     await writeFile(filename, events.map((event) => JSON.stringify(event)).join("\n"));
-    await checkInfrastructureTests(filename, { requiredWorkflows, report: () => {} });
+    await checkInfrastructureTests(filename, {
+      requiredWorkflows,
+      requiredPlanners,
+      report: () => {},
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -42,6 +46,13 @@ test("accepts rendered workflows and expected Terraform validation failures", as
 
 test("rejects a Terraform success log that omits the required workflow", async () => {
   await assert.rejects(verify([success]), /missing: runtime/);
+});
+
+test("rejects successful Terraform output without rendered planner permission evidence", async () => {
+  await assert.rejects(
+    verify([success], [], ["development_infrastructure_planning"]),
+    /Missing rendered planning scenarios: development_infrastructure_planning/,
+  );
 });
 
 test("rejects unresolved transitions in an otherwise successful Terraform run", async () => {
