@@ -8,12 +8,16 @@ on:
     - cron: "23 6 * * 1"
   workflow_dispatch:
   workflow_call:
+    inputs:
+      release_environment:
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.workflow }}-${{ github.ref }}
+  group: security-${{ github.workflow }}-${{ github.ref }}-${{ inputs.release_environment || 'standalone' }}
   cancel-in-progress: true
 
 jobs:

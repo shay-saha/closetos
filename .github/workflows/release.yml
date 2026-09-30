@@ -1,21 +1,32 @@
-name: Publish scanned release images
+name: Release CLOSET//OS
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Release environment
+        type: choice
+        options: [dev, prod]
+        default: dev
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ vars.AWS_APPLICATION_NAME || 'closetos' }}-${{ inputs.environment || 'dev' }}
   cancel-in-progress: false
+
+env:
+  RELEASE_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
 
 jobs:
   quality:
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/ci.yml
+    with:
+      release_environment: ${{ inputs.environment || 'dev' }}
 
   security:
     if: github.ref == 'refs/heads/main'
@@ -24,6 +35,8 @@ jobs:
       actions: read
       security-events: write
     uses: ./.github/workflows/security.yml
+    with:
+      release_environment: ${{ inputs.environment || 'dev' }}
 
   images:
     needs: [quality, security]
@@ -51,10 +64,10 @@ jobs:
       DOCKERFILE: ${{ matrix.dockerfile }}
       SOURCE_COMMIT: ${{ github.sha }}
       PUBLICATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-      RELEASE_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
-      RELEASE_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      RELEASE_ACCOUNT: ${{ inputs.environment == 'prod' && vars.AWS_PROD_ACCOUNT_ID || vars.AWS_ACCOUNT_ID }}
+      RELEASE_REGION: ${{ inputs.environment == 'prod' && vars.AWS_PROD_REGION || vars.AWS_REGION || 'eu-west-2' }}
       RELEASE_APPLICATION: ${{ vars.AWS_APPLICATION_NAME || 'closetos' }}
-      PUBLISH_ROLE: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+      PUBLISH_ROLE: ${{ inputs.environment == 'prod' && vars.AWS_PROD_PUBLISH_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_PUBLISH_ROLE_ARN || '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -64,11 +77,11 @@ jobs:
           install -d -m 700 "$RUNNER_TEMP/release-registry"
           printf 'DOCKER_CONFIG=%s\n' "$RUNNER_TEMP/release-registry" >> "$GITHUB_ENV"
       - name: Check configured publisher before requesting AWS credentials
-        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        if: env.PUBLISH_ROLE != ''
         run: |
           python3 scripts/release_images.py check \
             --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
-            --application "$RELEASE_APPLICATION" --environment dev \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
             --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" --role "$PUBLISH_ROLE"
       - name: Build the release image from this tested commit
         run: |
@@ -80,12 +93,12 @@ jobs:
       - name: Scan the exact release image
         run: ./scripts/scan-container.sh "$SERVICE" "$(cat "$RUNNER_TEMP/image-id")"
       - name: Obtain temporary AWS publishing credentials
-        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        if: env.PUBLISH_ROLE != ''
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
-          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-to-assume: ${{ env.PUBLISH_ROLE }}
+          aws-region: ${{ inputs.environment == 'prod' && vars.AWS_PROD_REGION || vars.AWS_REGION || 'eu-west-2' }}
+          allowed-account-ids: ${{ inputs.environment == 'prod' && vars.AWS_PROD_ACCOUNT_ID || vars.AWS_ACCOUNT_ID }}
           role-session-name: closetos-publish-${{ github.run_id }}
           role-duration-seconds: 1800
           unset-current-credentials: true
@@ -93,11 +106,11 @@ jobs:
           output-credentials: false
           translate-env-variables: false
       - name: Publish the scanned image and confirm its immutable registry digest
-        if: vars.AWS_PUBLISH_ROLE_ARN != ''
+        if: env.PUBLISH_ROLE != ''
         run: |
           python3 scripts/release_images.py publish \
             --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
-            --application "$RELEASE_APPLICATION" --environment dev \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
             --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
             --service "$SERVICE" --image "$(cat "$RUNNER_TEMP/image-id")" \
             --scan ".security/reports/$SERVICE.json" --destination "$RUNNER_TEMP/release/$SERVICE.json"
@@ -109,19 +122,19 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: success() && vars.AWS_PUBLISH_ROLE_ARN != ''
+        if: success() && env.PUBLISH_ROLE != ''
         with:
           name: published-image-${{ matrix.service }}
           path: ${{ runner.temp }}/release/${{ matrix.service }}.json
           if-no-files-found: error
           retention-days: 90
       - name: Report local-only verification when AWS is not configured
-        if: success() && vars.AWS_PUBLISH_ROLE_ARN == ''
+        if: success() && env.PUBLISH_ROLE == ''
         run: echo 'The release image was built and scanned. ECR publishing awaits AWS_ACCOUNT_ID and AWS_PUBLISH_ROLE_ARN.' >> "$GITHUB_STEP_SUMMARY"
 
   manifest:
     needs: images
-    if: vars.AWS_PUBLISH_ROLE_ARN != ''
+    if: (inputs.environment == 'prod' && vars.AWS_PROD_PUBLISH_ROLE_ARN != '') || (inputs.environment != 'prod' && vars.AWS_PUBLISH_ROLE_ARN != '')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -135,15 +148,15 @@ jobs:
           merge-multiple: true
       - name: Verify all three published images belong to this release
         env:
-          RELEASE_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
-          RELEASE_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          RELEASE_ACCOUNT: ${{ inputs.environment == 'prod' && vars.AWS_PROD_ACCOUNT_ID || vars.AWS_ACCOUNT_ID }}
+          RELEASE_REGION: ${{ inputs.environment == 'prod' && vars.AWS_PROD_REGION || vars.AWS_REGION || 'eu-west-2' }}
           RELEASE_APPLICATION: ${{ vars.AWS_APPLICATION_NAME || 'closetos' }}
           SOURCE_COMMIT: ${{ github.sha }}
           PUBLICATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           python3 scripts/release_images.py collect \
             --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
-            --application "$RELEASE_APPLICATION" --environment dev \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
             --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
             --directory "$RUNNER_TEMP/published-images" --destination "$RUNNER_TEMP/release.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -156,3 +169,25 @@ jobs:
         env:
           SOURCE_COMMIT: ${{ github.sha }}
         run: echo "All three scanned images for $SOURCE_COMMIT were published. Their immutable digests are in the release-manifest artifact." >> "$GITHUB_STEP_SUMMARY"
+
+  deployment:
+    needs: manifest
+    if: (inputs.environment == 'prod' && vars.AWS_PROD_INFRASTRUCTURE_ROLE_ARN != '') || (inputs.environment != 'prod' && vars.AWS_INFRASTRUCTURE_ROLE_ARN != '')
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: ${{ inputs.environment || 'dev' }}
+      account: ${{ inputs.environment == 'prod' && vars.AWS_PROD_ACCOUNT_ID || vars.AWS_ACCOUNT_ID }}
+      region: ${{ inputs.environment == 'prod' && vars.AWS_PROD_REGION || vars.AWS_REGION || 'eu-west-2' }}
+      application: ${{ vars.AWS_APPLICATION_NAME || 'closetos' }}
+      configuration: ${{ inputs.environment == 'prod' && vars.AWS_PROD_TERRAFORM_VARIABLES_JSON || inputs.environment != 'prod' && vars.AWS_TERRAFORM_VARIABLES_JSON || '' }}
+      planner_role: ${{ inputs.environment == 'prod' && vars.AWS_PROD_PLANNER_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_PLANNER_ROLE_ARN || '' }}
+      infrastructure_role: ${{ inputs.environment == 'prod' && vars.AWS_PROD_INFRASTRUCTURE_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_INFRASTRUCTURE_ROLE_ARN || '' }}
+      initializer_role: ${{ inputs.environment == 'prod' && vars.AWS_PROD_INITIALIZER_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_INITIALIZER_ROLE_ARN || '' }}
+      migrator_role: ${{ inputs.environment == 'prod' && vars.AWS_PROD_MIGRATOR_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_MIGRATOR_ROLE_ARN || '' }}
+      deployer_role: ${{ inputs.environment == 'prod' && vars.AWS_PROD_DEPLOYER_ROLE_ARN || inputs.environment != 'prod' && vars.AWS_DEPLOYER_ROLE_ARN || '' }}
+    secrets:
+      MEDIA_SIGNING_PRIVATE_KEY: ${{ secrets.MEDIA_SIGNING_PRIVATE_KEY }}

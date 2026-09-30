@@ -1,0 +1,161 @@
+name: Plan and deploy a verified release
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      account:
+        type: string
+        required: true
+      region:
+        type: string
+        required: true
+      application:
+        type: string
+        required: true
+      configuration:
+        type: string
+        required: true
+      planner_role:
+        type: string
+        required: true
+      infrastructure_role:
+        type: string
+        required: true
+      initializer_role:
+        type: string
+        required: true
+      migrator_role:
+        type: string
+        required: true
+      deployer_role:
+        type: string
+        required: true
+    secrets:
+      MEDIA_SIGNING_PRIVATE_KEY:
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+env:
+  RELEASE_ACCOUNT: ${{ inputs.account }}
+  RELEASE_REGION: ${{ inputs.region }}
+  RELEASE_APPLICATION: ${{ inputs.application }}
+  RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+  SOURCE_COMMIT: ${{ github.sha }}
+  PUBLICATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+  PLANNER_ROLE: ${{ inputs.planner_role }}
+  INFRASTRUCTURE_ROLE: ${{ inputs.infrastructure_role }}
+  INITIALIZER_ROLE: ${{ inputs.initializer_role }}
+  MIGRATOR_ROLE: ${{ inputs.migrator_role }}
+  DEPLOYER_ROLE: ${{ inputs.deployer_role }}
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate separated roles and production protection before AWS access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 scripts/release_deployment.py check \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+            --planner "$PLANNER_ROLE" --infrastructure "$INFRASTRUCTURE_ROLE" \
+            --initializer "$INITIALIZER_ROLE" --migrator "$MIGRATOR_ROLE" --deployer "$DEPLOYER_ROLE" \
+            --repository "$DEPLOYMENT_REPOSITORY"
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-manifest
+          path: ${{ runner.temp }}/release-manifest
+      - name: Prepare public infrastructure configuration
+        env:
+          PUBLIC_CONFIGURATION: ${{ inputs.configuration }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          Path(os.environ["RUNNER_TEMP"], "public-configuration.json").write_text(os.environ["PUBLIC_CONFIGURATION"])
+          PY
+          python3 scripts/release_infrastructure.py check \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+            --manifest "$RUNNER_TEMP/release-manifest/release.json" --variables "$RUNNER_TEMP/public-configuration.json"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+      - name: Obtain temporary planning credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.PLANNER_ROLE }}
+          aws-region: ${{ env.RELEASE_REGION }}
+          allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+          role-duration-seconds: 1800
+          unset-current-credentials: true
+          use-existing-credentials: false
+          output-credentials: false
+          translate-env-variables: false
+      - name: Prepare a reviewable plan while preserving live revisions
+        run: |
+          python3 scripts/release_infrastructure.py plan \
+            --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+            --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+            --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+            --manifest "$RUNNER_TEMP/release-manifest/release.json" --variables "$RUNNER_TEMP/public-configuration.json" \
+            --destination "$RUNNER_TEMP/infrastructure-plan"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          plan = json.loads((Path(os.environ["RUNNER_TEMP"]) / "infrastructure-plan/plan.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(f"Plan for `{plan['sourceCommit']}` in `{plan['environment']}`\n\nPlan digest: `{plan['planDigest']}`\n\n")
+              for change in plan["changes"]:
+                  summary.write(f"- `{change['address']}`: {', '.join(change['actions'])}\n")
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: infrastructure-plan
+          path: ${{ runner.temp }}/infrastructure-plan
+          if-no-files-found: error
+          retention-days: 7
+
+  development:
+    needs: plan
+    if: inputs.environment == 'dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/deploy
+        with:
+          signing-private-key: ${{ secrets.MEDIA_SIGNING_PRIVATE_KEY }}
+
+  production:
+    needs: plan
+    if: inputs.environment == 'prod'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/deploy
+        with:
+          signing-private-key: ${{ secrets.MEDIA_SIGNING_PRIVATE_KEY }}

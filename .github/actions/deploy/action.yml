@@ -1,0 +1,167 @@
+name: Apply a migrated release
+description: Apply the reviewed plan, initialize secrets, migrate, verify service and worker rollout, and report the result.
+inputs:
+  signing-private-key:
+    description: Optional first-use signing key matching the Terraform public key; existing signing secrets are preserved.
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Recheck deployment roles and environment protection before applying
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEPLOYMENT_REPOSITORY: ${{ github.repository }}
+      run: |
+        python3 scripts/release_deployment.py check \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --planner "$PLANNER_ROLE" --infrastructure "$INFRASTRUCTURE_ROLE" \
+          --initializer "$INITIALIZER_ROLE" --migrator "$MIGRATOR_ROLE" --deployer "$DEPLOYER_ROLE" \
+          --repository "$DEPLOYMENT_REPOSITORY"
+    - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+      with:
+        terraform_version: "1.16.4"
+        terraform_wrapper: false
+    - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      with:
+        name: release-manifest
+        path: ${{ runner.temp }}/release-manifest
+    - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      with:
+        name: infrastructure-plan
+        path: ${{ runner.temp }}/infrastructure-plan
+    - name: Obtain infrastructure apply credentials
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ env.INFRASTRUCTURE_ROLE }}
+        aws-region: ${{ env.RELEASE_REGION }}
+        allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+        role-duration-seconds: 3600
+        unset-current-credentials: true
+        use-existing-credentials: false
+        output-credentials: false
+        translate-env-variables: false
+    - name: Apply the exact reviewed infrastructure plan
+      shell: bash
+      run: |
+        python3 scripts/release_infrastructure.py apply \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --manifest "$RUNNER_TEMP/release-manifest/release.json" \
+          --bundle "$RUNNER_TEMP/infrastructure-plan" \
+          --destination "$RUNNER_TEMP/results/infrastructure.json"
+    - name: Obtain application secret initialization credentials
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ env.INITIALIZER_ROLE }}
+        aws-region: ${{ env.RELEASE_REGION }}
+        allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+        role-duration-seconds: 900
+        unset-current-credentials: true
+        use-existing-credentials: false
+        output-credentials: false
+        translate-env-variables: false
+    - name: Initialize empty secrets and preserve existing credentials
+      shell: bash
+      env:
+        MEDIA_SIGNING_PRIVATE_KEY: ${{ inputs.signing-private-key }}
+      run: |
+        python3 scripts/release_secrets.py initialize \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --infrastructure "$RUNNER_TEMP/results/infrastructure.json" \
+          --variables "$RUNNER_TEMP/infrastructure-plan/release.tfvars.json" \
+          --destination "$RUNNER_TEMP/results/secrets.json"
+    - name: Obtain standalone migration credentials
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ env.MIGRATOR_ROLE }}
+        aws-region: ${{ env.RELEASE_REGION }}
+        allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+        role-duration-seconds: 1800
+        unset-current-credentials: true
+        use-existing-credentials: false
+        output-credentials: false
+        translate-env-variables: false
+    - name: Require a confirmed zero exit from the exact release migration
+      shell: bash
+      run: |
+        python3 scripts/release_migration.py run \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --manifest "$RUNNER_TEMP/release-manifest/release.json" \
+          --infrastructure "$RUNNER_TEMP/results/infrastructure.json" \
+          --destination "$RUNNER_TEMP/results/migration.json"
+    - name: Obtain service and worker rollout credentials
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ env.DEPLOYER_ROLE }}
+        aws-region: ${{ env.RELEASE_REGION }}
+        allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+        role-duration-seconds: 3600
+        unset-current-credentials: true
+        use-existing-credentials: false
+        output-credentials: false
+        translate-env-variables: false
+    - name: Roll out expected healthy revisions and run public smoke checks
+      shell: bash
+      run: |
+        python3 scripts/release_rollout.py deploy \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --manifest "$RUNNER_TEMP/release-manifest/release.json" \
+          --infrastructure "$RUNNER_TEMP/results/infrastructure.json" \
+          --migration "$RUNNER_TEMP/results/migration.json" \
+          --destination "$RUNNER_TEMP/results/rollout.json" --timeout 300
+    - name: Obtain bounded autoscaling activation credentials
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ env.INFRASTRUCTURE_ROLE }}
+        aws-region: ${{ env.RELEASE_REGION }}
+        allowed-account-ids: ${{ env.RELEASE_ACCOUNT }}
+        role-duration-seconds: 1800
+        unset-current-credentials: true
+        use-existing-credentials: false
+        output-credentials: false
+        translate-env-variables: false
+    - name: Enable bounded scaling only after the verified release
+      shell: bash
+      run: |
+        python3 scripts/release_infrastructure.py activate \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --manifest "$RUNNER_TEMP/release-manifest/release.json" \
+          --bundle "$RUNNER_TEMP/infrastructure-plan" \
+          --rollout "$RUNNER_TEMP/results/rollout.json" --destination "$RUNNER_TEMP/results/scaling"
+    - name: Publish the bound deployment result
+      if: always()
+      shell: bash
+      run: |
+        python3 scripts/release_deployment.py report \
+          --account "$RELEASE_ACCOUNT" --region "$RELEASE_REGION" \
+          --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
+          --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
+          --directory "$RUNNER_TEMP/results" --destination "$RUNNER_TEMP/results/deployment.json"
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "results/deployment.json").read_text())
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+            summary.write(f"Deployment for `{result['sourceCommit']}` in `{result['environment']}`: **{result['status']}**\n\n")
+            for stage, status in result["stages"].items():
+                summary.write(f"- {stage}: {status}\n")
+        PY
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      if: always()
+      with:
+        name: deployment-result
+        path: ${{ runner.temp }}/results
+        if-no-files-found: error
+        retention-days: 30
