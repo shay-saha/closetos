@@ -123,19 +123,21 @@ def main():
             text=True,
             timeout=30,
         )
-        assert result.stdout.strip() == "12|012", (
+        assert result.stdout.strip() == "13|013", (
             "Packaged schema history is incomplete"
         )
         grants = subprocess.run(
             [
                 *inspection,
-                "SET ROLE closetos_app; SELECT count(*) FROM garment; "
-                "SELECT maximum_active FROM workflow_capacity FOR UPDATE; "
-                "SELECT has_table_privilege(current_user,'flyway_schema_history','SELECT'), "
-                "has_table_privilege(current_user,'expensive_action_policy','UPDATE'), "
-                "has_column_privilege(current_user,'workflow_capacity','maximum_active','UPDATE'), "
-                "has_schema_privilege(current_user,'public','CREATE'), "
-                "has_database_privilege(current_user,current_database(),'TEMP');",
+                (
+                    "SET ROLE closetos_app; SELECT count(*) FROM garment; "
+                    "SELECT maximum_active FROM workflow_capacity FOR UPDATE; "
+                    "SELECT has_table_privilege(current_user,'flyway_schema_history','SELECT'), "
+                    "has_table_privilege(current_user,'expensive_action_policy','UPDATE'), "
+                    "has_column_privilege(current_user,'workflow_capacity','maximum_active','UPDATE'), "
+                    "has_schema_privilege(current_user,'public','CREATE'), "
+                    "has_database_privilege(current_user,current_database(),'TEMP');"
+                ),
             ],
             check=True,
             capture_output=True,
@@ -168,7 +170,7 @@ def main():
             and "checksum mismatch" in rejected.stdout + rejected.stderr
         )
         print(
-            "Migration container passed: 12 migrations, safe replay, restricted runtime grants, changed-checksum refusal; no web startup"
+            "Migration container passed: 13 migrations, safe replay, restricted runtime grants, changed-checksum refusal; no web startup"
         )
     finally:
         subprocess.run(

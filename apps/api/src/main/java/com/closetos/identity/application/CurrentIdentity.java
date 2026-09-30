@@ -1,11 +1,8 @@
 package com.closetos.identity.application;
 
 import com.closetos.identity.api.IdentityAccess;
-import com.closetos.platform.api.DomainException;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,19 +10,28 @@ import org.springframework.transaction.annotation.Transactional;
 class CurrentIdentity implements IdentityAccess {
     private final JdbcClient jdbc;
 
-    CurrentIdentity(JdbcClient jdbc) {
+    private final RevokedIdentities revocations;
+
+    CurrentIdentity(JdbcClient jdbc, RevokedIdentities revocations) {
         this.jdbc = jdbc;
+        this.revocations = revocations;
     }
 
     @Override
     @Transactional
     public UUID currentUserId() {
-        var authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!(authentication instanceof JwtAuthenticationToken token)) {
-            throw new DomainException(401, "AUTHENTICATION", "Sign in to continue.");
-        }
-        String subject = token.getToken().getSubject();
-        String displayName = token.getToken().getClaimAsString("name");
+        var token = AuthenticatedSubject.token();
+        String subject = token.getSubject();
+        revocations.requireAvailable(subject);
+        var existing =
+                jdbc.sql("SELECT id FROM user_profile WHERE cognito_sub = :subject")
+                        .param("subject", subject)
+                        .query(UUID.class)
+                        .optional();
+        if (existing.isPresent()) return existing.get();
+        revocations.lock(subject);
+        revocations.requireAvailable(subject);
+        String displayName = token.getClaimAsString("name");
         jdbc.sql(
                         """
                 INSERT INTO user_profile (id, cognito_sub, display_name)

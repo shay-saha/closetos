@@ -54,7 +54,7 @@ class DatabaseMigrationTest {
 
     @Test
     void migratesAnEmptyDatabaseAndSafelyReplaysWithoutStartingSpring() throws Exception {
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(12);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(13);
         assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isZero();
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
                         statement.executeQuery(
                                 "SELECT count(*) FROM flyway_schema_history WHERE success")) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getInt(1)).isEqualTo(12);
+            assertThat(result.getInt(1)).isEqualTo(13);
         }
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -108,7 +108,7 @@ class DatabaseMigrationTest {
                         'arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:garment-image-00000000-0000-4000-8000-000000000004-pipeline-1-r1','PROCESSING_MEDIA',1)
                     """);
         }
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(3);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(4);
         try (var connection = connect();
                 var statement = connection.createStatement();
                 var result =
@@ -185,6 +185,10 @@ class DatabaseMigrationTest {
                         "UPDATE flyway_schema_history SET checksum=0",
                         "UPDATE expensive_action_policy SET long_limit=100000",
                         "DELETE FROM expensive_action_policy",
+                        "DELETE FROM identity_authentication",
+                        "DELETE FROM account_removal",
+                        "UPDATE identity_authentication SET subject_hash = repeat('0',64)",
+                        "UPDATE account_removal SET requested_at = now()",
                         "UPDATE workflow_capacity SET maximum_active=16",
                         "CREATE ROLE injected",
                         "SET ROLE " + POSTGRES.getUsername()
@@ -332,7 +336,7 @@ class DatabaseMigrationTest {
                             ownerPassword,
                             "APPLICATION_DATABASE_PASSWORD",
                             runtimePassword);
-            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(12);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(13);
             assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
             try (var connection =
                             DriverManager.getConnection(

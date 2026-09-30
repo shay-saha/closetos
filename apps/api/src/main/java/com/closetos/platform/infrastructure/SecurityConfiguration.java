@@ -1,5 +1,7 @@
 package com.closetos.platform.infrastructure;
 
+import com.closetos.platform.api.IdentityRevocations;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,17 +17,24 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 class SecurityConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(
-            HttpSecurity http, @Value("${closetos.auth.provider:cognito}") String provider)
+            HttpSecurity http,
+            @Value("${closetos.auth.provider:cognito}") String provider,
+            IdentityRevocations revocations,
+            MeterRegistry metrics)
             throws Exception {
         var authentication = new JwtAuthenticationConverter();
         authentication.setJwtGrantedAuthoritiesConverter(new AdministratorAuthorities(provider));
-        return http.csrf(csrf -> csrf.disable())
+        return http.addFilterAfter(
+                        new RevokedIdentityFilter(revocations, metrics),
+                        BearerTokenAuthenticationFilter.class)
+                .csrf(csrf -> csrf.disable())
                 .sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(
