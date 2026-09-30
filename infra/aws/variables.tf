@@ -104,6 +104,11 @@ variable "services_enabled" {
   default     = false
   description = "Enable bounded service autoscaling after the release controller starts migrated, healthy services. Terraform prepares services with zero tasks and preserves live release revisions and counts."
 }
+variable "application_permissions_boundaries_enabled" {
+  type        = bool
+  default     = false
+  description = "Attach the bootstrap's separate application-role boundaries. Release automation always enables this; initial foundation provisioning may precede boundary creation."
+}
 variable "route53_zone_id" {
   type    = string
   default = null

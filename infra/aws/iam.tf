@@ -1,6 +1,7 @@
 locals {
-  workflow_arn = "arn:${local.partition}:states:${var.region}:${local.account_id}:stateMachine:${local.name}-media"
-  cluster_arn  = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:cluster/${local.name}"
+  permissions_boundary_prefix = "arn:${local.partition}:iam::${local.account_id}:policy/${local.name}"
+  workflow_arn                = "arn:${local.partition}:states:${var.region}:${local.account_id}:stateMachine:${local.name}-media"
+  cluster_arn                 = "arn:${local.partition}:ecs:${var.region}:${local.account_id}:cluster/${local.name}"
   task_trust = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -21,14 +22,16 @@ locals {
 }
 
 resource "aws_iam_role" "task" {
-  for_each           = aws_ecr_repository.application
-  name               = "${local.name}-${each.key}-task"
-  assume_role_policy = local.task_trust
+  for_each             = aws_ecr_repository.application
+  name                 = "${local.name}-${each.key}-task"
+  assume_role_policy   = local.task_trust
+  permissions_boundary = var.application_permissions_boundaries_enabled ? "${local.permissions_boundary_prefix}-${each.key}-task-permissions-boundary" : null
 }
 resource "aws_iam_role" "execution" {
-  for_each           = aws_ecr_repository.application
-  name               = "${local.name}-${each.key}-execution"
-  assume_role_policy = local.task_trust
+  for_each             = aws_ecr_repository.application
+  name                 = "${local.name}-${each.key}-execution"
+  assume_role_policy   = local.task_trust
+  permissions_boundary = var.application_permissions_boundaries_enabled ? "${local.permissions_boundary_prefix}-${each.key}-execution-permissions-boundary" : null
 }
 resource "aws_iam_role_policy" "execution" {
   for_each = aws_iam_role.execution
@@ -142,7 +145,8 @@ resource "aws_iam_role_policy" "worker" {
   })
 }
 resource "aws_iam_role" "workflow" {
-  name = "${local.name}-media-workflow"
+  name                 = "${local.name}-media-workflow"
+  permissions_boundary = var.application_permissions_boundaries_enabled ? "${local.permissions_boundary_prefix}-media-workflow-permissions-boundary" : null
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

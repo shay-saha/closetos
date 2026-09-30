@@ -73,6 +73,19 @@ SECRET_ENVIRONMENT = frozenset(
         "NEXTAUTH_SECRET",
     }
 )
+APPLICATION_ROLES = frozenset(
+    {
+        "api-task",
+        "api-execution",
+        "web-task",
+        "web-execution",
+        "media-worker-task",
+        "media-worker-execution",
+        "migration-task",
+        "migration-execution",
+        "media-workflow",
+    }
+)
 
 
 def redact(value, sensitive=False):
@@ -182,6 +195,7 @@ def configuration(release, manifest, supplied, *, scaling=False):
             key: image["imageDigest"] for key, image in manifest["images"].items()
         },
         "services_enabled": scaling,
+        "application_permissions_boundaries_enabled": True,
     }
 
 
@@ -263,7 +277,55 @@ def scaling_enabled(state):
     return bool(active)
 
 
-def inspect_plan(plan, stage):
+def inspect_application_role(values, release):
+    require(isinstance(release, dict), "Bind application IAM changes to a release.")
+    prefix = f"{release['application']}-{release['environment']}"
+    name = values.get("name")
+    require(
+        name in {f"{prefix}-{suffix}" for suffix in APPLICATION_ROLES},
+        "Deployment may manage only this environment's application roles.",
+    )
+    require(
+        values.get("permissions_boundary")
+        == f"arn:aws:iam::{release['accountId']}:policy/{name}-permissions-boundary",
+        "Each application role must retain its own bootstrap permissions boundary.",
+    )
+    try:
+        trust = json.loads(values.get("assume_role_policy", ""))
+    except (ValueError, TypeError):
+        raise ReleaseError("Application role trust must be valid IAM JSON.") from None
+    workflow = name == f"{prefix}-media-workflow"
+    expected = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "states.amazonaws.com"
+                    if workflow
+                    else "ecs-tasks.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole",
+                "Condition": {
+                    "StringEquals": {"aws:SourceAccount": release["accountId"]},
+                    "ArnEquals" if workflow else "ArnLike": {
+                        "aws:SourceArn": (
+                            f"arn:aws:states:{release['region']}:{release['accountId']}:stateMachine:{prefix}-media"
+                            if workflow
+                            else f"arn:aws:ecs:{release['region']}:{release['accountId']}:*"
+                        )
+                    },
+                },
+            }
+        ],
+    }
+    require(
+        trust == expected,
+        "Application role trust must remain bound to the environment's ECS tasks or media workflow.",
+    )
+
+
+def inspect_plan(plan, stage, release=None):
     require(
         plan.get("format_version") == "1.2"
         and isinstance(plan.get("terraform_version"), str)
@@ -308,6 +370,17 @@ def inspect_plan(plan, stage):
             isinstance(before, dict) and isinstance(after, dict),
             "Terraform reported invalid resource values.",
         )
+        if resource.get("mode") == "managed" and str(kind).startswith("aws_iam_"):
+            require(
+                kind in {"aws_iam_role", "aws_iam_role_policy"},
+                "Release plans cannot administer bootstrap IAM policies or federation.",
+            )
+            if kind == "aws_iam_role":
+                require(
+                    "delete" not in actions,
+                    "Release plans cannot delete or replace application roles.",
+                )
+                inspect_application_role(after, release)
         if kind == "aws_ecs_task_definition":
             if "delete" in actions:
                 require(
@@ -412,7 +485,7 @@ def plan_release(release, manifest, supplied, destination):
     )
     rendered = parse_json(terraform("show", "-json", str(plan_file)))
     verify_plan_variables(rendered, variables)
-    summary = inspect_plan(rendered, "prepare")
+    summary = inspect_plan(rendered, "prepare", release)
     write_json(destination / "review.json", review(rendered))
     result = {
         **release,
@@ -469,7 +542,7 @@ def apply_release(release, manifest, directory, destination):
     initialize_backend(release)
     plan = parse_json(terraform("show", "-json", str(directory / "prepare.tfplan")))
     verify_plan_variables(plan, variables)
-    inspect_plan(plan, "prepare")
+    inspect_plan(plan, "prepare", release)
     terraform(
         "apply",
         "-input=false",
@@ -580,7 +653,7 @@ def activate_scaling(release, manifest, directory, rollout_receipt, destination)
     )
     rendered = parse_json(terraform("show", "-json", str(plan_file)))
     verify_plan_variables(rendered, variables)
-    summary = inspect_plan(rendered, "scaling")
+    summary = inspect_plan(rendered, "scaling", release)
     terraform("apply", "-input=false", "-lock-timeout=5m", "-no-color", str(plan_file))
     require(
         scaling_enabled(parse_json(terraform("show", "-json"))),

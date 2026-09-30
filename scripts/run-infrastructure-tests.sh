@@ -6,7 +6,7 @@ terraform_binary="${TERRAFORM:-terraform}"
 test_output="$(mktemp)"
 trap 'rm -f "$test_output"' EXIT
 
-node --test "$repository_root/scripts/check-infrastructure-tests.test.mjs" "$repository_root/scripts/check-planning-access.test.mjs"
+node --test "$repository_root/scripts/check-infrastructure-tests.test.mjs" "$repository_root/scripts/check-iam-permissions.test.mjs"
 
 for module in bootstrap aws; do
   module_directory="$repository_root/infra/$module"

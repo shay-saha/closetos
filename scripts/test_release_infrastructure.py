@@ -50,6 +50,42 @@ def plan(changes=None):
     }
 
 
+def application_role(release, suffix="api-task"):
+    prefix = f"{release['application']}-{release['environment']}"
+    name = f"{prefix}-{suffix}"
+    workflow = suffix == "media-workflow"
+    return {
+        "name": name,
+        "permissions_boundary": f"arn:aws:iam::{release['accountId']}:policy/{name}-permissions-boundary",
+        "assume_role_policy": json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "states.amazonaws.com"
+                            if workflow
+                            else "ecs-tasks.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole",
+                        "Condition": {
+                            "StringEquals": {"aws:SourceAccount": release["accountId"]},
+                            "ArnEquals" if workflow else "ArnLike": {
+                                "aws:SourceArn": (
+                                    f"arn:aws:states:{release['region']}:{release['accountId']}:stateMachine:{prefix}-media"
+                                    if workflow
+                                    else f"arn:aws:ecs:{release['region']}:{release['accountId']}:*"
+                                )
+                            },
+                        },
+                    }
+                ],
+            }
+        ),
+    }
+
+
 class InfrastructureTools:
     def __init__(self, release, manifest, outputs, supplied):
         self.release, self.outputs = release, outputs
@@ -237,6 +273,9 @@ class ReleaseInfrastructureTest(unittest.TestCase):
             },
         )
         self.assertFalse(self.tools.variables["services_enabled"])
+        self.assertTrue(
+            self.tools.variables["application_permissions_boundaries_enabled"]
+        )
         self.assertNotIn("apply", self.actions())
         init = next(
             args
@@ -304,6 +343,7 @@ class ReleaseInfrastructureTest(unittest.TestCase):
         for key, value in [
             ("image_digests", {}),
             ("services_enabled", True),
+            ("application_permissions_boundaries_enabled", False),
             ("environment", "prod"),
             ("database_password", "do-not-save"),
             ("cloudfront_public_key", "-----BEGIN PRIVATE KEY-----"),
@@ -311,6 +351,152 @@ class ReleaseInfrastructureTest(unittest.TestCase):
             supplied = {**self.supplied, key: value}
             with self.subTest(key=key), self.assertRaises(images.ReleaseError):
                 infrastructure.configuration(self.release, self.manifest, supplied)
+
+    def test_application_iam_changes_require_each_roles_own_bootstrap_boundary(self):
+        for suffix in infrastructure.APPLICATION_ROLES:
+            after = application_role(self.release, suffix)
+            before = {**after, "permissions_boundary": None}
+            changes = plan([change("aws_iam_role", before, after)])
+            self.assertEqual(
+                len(infrastructure.inspect_plan(changes, "prepare", self.release)), 1
+            )
+            for boundary in [
+                None,
+                after["permissions_boundary"].replace("123456789012", "999999999999"),
+                after["permissions_boundary"].replace("closetos-dev", "closetos-prod"),
+                "arn:aws:iam::123456789012:policy/AdministratorAccess",
+                "arn:aws:iam::123456789012:policy/closetos-dev-unrelated-permissions-boundary",
+            ]:
+                with (
+                    self.subTest(role=suffix, boundary=boundary),
+                    self.assertRaises(images.ReleaseError),
+                ):
+                    infrastructure.inspect_plan(
+                        plan(
+                            [
+                                change(
+                                    "aws_iam_role",
+                                    after,
+                                    {**after, "permissions_boundary": boundary},
+                                )
+                            ]
+                        ),
+                        "prepare",
+                        self.release,
+                    )
+
+    def test_release_iam_scope_excludes_bootstrap_roles_policies_and_federation(self):
+        values = application_role(self.release)
+        with self.assertRaises(images.ReleaseError):
+            infrastructure.inspect_plan(
+                plan(
+                    [
+                        change(
+                            "aws_iam_role",
+                            after={
+                                **values,
+                                "name": "closetos-dev-github-infrastructure",
+                            },
+                        )
+                    ]
+                ),
+                "prepare",
+                self.release,
+            )
+        for kind in [
+            "aws_iam_policy",
+            "aws_iam_openid_connect_provider",
+            "aws_iam_role_policy_attachment",
+            "aws_iam_user",
+        ]:
+            with self.subTest(kind=kind), self.assertRaises(images.ReleaseError):
+                infrastructure.inspect_plan(
+                    plan(
+                        [change(kind, after={"name": "bootstrap"}, actions=["create"])]
+                    ),
+                    "prepare",
+                    self.release,
+                )
+        with self.assertRaises(images.ReleaseError):
+            infrastructure.inspect_plan(
+                plan([change("aws_iam_role", after=values)]), "prepare"
+            )
+        for actions in [["delete"], ["delete", "create"], ["create", "delete"]]:
+            with self.subTest(actions=actions), self.assertRaises(images.ReleaseError):
+                infrastructure.inspect_plan(
+                    plan([change("aws_iam_role", values, values, actions)]),
+                    "prepare",
+                    self.release,
+                )
+
+    def test_release_iam_trust_cannot_be_broadened_to_other_principals_or_workloads(
+        self,
+    ):
+        for suffix in ["api-task", "media-workflow"]:
+            values = application_role(self.release, suffix)
+            original = json.loads(values["assume_role_policy"])
+            for kind in ["principal", "account", "source", "action", "extra-statement"]:
+                trust = copy.deepcopy(original)
+                statement = trust["Statement"][0]
+                if kind == "principal":
+                    statement["Principal"] = {"AWS": "arn:aws:iam::123456789012:root"}
+                elif kind == "account":
+                    statement["Condition"]["StringEquals"]["aws:SourceAccount"] = (
+                        "999999999999"
+                    )
+                elif kind == "source":
+                    key = "ArnEquals" if suffix == "media-workflow" else "ArnLike"
+                    statement["Condition"][key]["aws:SourceArn"] = "*"
+                elif kind == "action":
+                    statement["Action"] = [
+                        "sts:AssumeRole",
+                        "sts:AssumeRoleWithWebIdentity",
+                    ]
+                else:
+                    trust["Statement"].append(
+                        {
+                            "Effect": "Allow",
+                            "Principal": "*",
+                            "Action": "sts:AssumeRole",
+                        }
+                    )
+                with (
+                    self.subTest(role=suffix, mutation=kind),
+                    self.assertRaises(images.ReleaseError),
+                ):
+                    infrastructure.inspect_plan(
+                        plan(
+                            [
+                                change(
+                                    "aws_iam_role",
+                                    values,
+                                    {**values, "assume_role_policy": json.dumps(trust)},
+                                )
+                            ]
+                        ),
+                        "prepare",
+                        self.release,
+                    )
+
+    def test_unbounded_role_is_rejected_before_a_review_receipt_is_published(self):
+        values = {**application_role(self.release), "permissions_boundary": None}
+        self.tools.plan = plan(
+            [change("aws_iam_role", after=values, actions=["create"])]
+        )
+        with self.assertRaises(images.ReleaseError):
+            self.prepare()
+        self.assertFalse((self.bundle / "plan.json").exists())
+        self.assertNotIn("apply", self.actions())
+
+    def test_boundaries_are_rechecked_before_applying_a_saved_release_plan(self):
+        self.prepare()
+        values = {**application_role(self.release), "permissions_boundary": None}
+        self.tools.plan = plan(
+            [change("aws_iam_role", after=values, actions=["create"])]
+        )
+        with self.assertRaises(images.ReleaseError):
+            self.apply()
+        self.assertNotIn("apply", self.actions())
 
     def test_modified_plan_variables_or_receipt_are_rejected_before_aws_access(self):
         self.prepare()

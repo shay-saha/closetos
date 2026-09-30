@@ -21,7 +21,13 @@ const workflow = (definition) => ({
   },
 });
 
-async function verify(events, requiredWorkflows = ["runtime"], requiredPlanners = []) {
+async function verify(
+  events,
+  requiredWorkflows = ["runtime"],
+  requiredPlanners = [],
+  requiredBoundaries = [],
+  requiredBoundedRoles = [],
+) {
   const directory = await mkdtemp(join(tmpdir(), "closetos-workflow-gate-"));
   try {
     const filename = join(directory, "terraform.jsonl");
@@ -29,6 +35,8 @@ async function verify(events, requiredWorkflows = ["runtime"], requiredPlanners 
     await checkInfrastructureTests(filename, {
       requiredWorkflows,
       requiredPlanners,
+      requiredBoundaries,
+      requiredBoundedRoles,
       report: () => {},
     });
   } finally {
@@ -52,6 +60,13 @@ test("rejects successful Terraform output without rendered planner permission ev
   await assert.rejects(
     verify([success], [], ["development_infrastructure_planning"]),
     /Missing rendered planning scenarios: development_infrastructure_planning/,
+  );
+});
+
+test("rejects green Terraform logs without required boundaries and bounded runtime evidence", async () => {
+  await assert.rejects(
+    verify([success], [], [], ["boundaries"], ["runtime"]),
+    /Missing rendered application boundary evidence: boundaries, runtime/,
   );
 });
 

@@ -1,40 +1,7 @@
 import assert from "node:assert/strict";
+import { iamPermission } from "./check-iam-permissions.mjs";
 
 const array = (value) => (Array.isArray(value) ? value : [value]);
-const matches = (pattern, value, insensitive = false) => {
-  const expression = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replaceAll("*", ".*")
-    .replaceAll("?", ".");
-  return new RegExp(`^${expression}$`, insensitive ? "i" : "").test(value);
-};
-
-export function planningPermission(policies, action, resource, context = {}) {
-  let allowed = false;
-  for (const policy of policies) {
-    for (const statement of policy.Statement) {
-      assert(!statement.NotAction && !statement.NotResource && !statement.Principal);
-      if (!array(statement.Action).some((pattern) => matches(pattern, action, true))) continue;
-      if (!array(statement.Resource).some((pattern) => matches(pattern, resource))) continue;
-      const conditions = Object.entries(statement.Condition ?? {});
-      if (
-        !conditions.every(([operator, keys]) => {
-          assert.equal(operator, "StringEquals", "Unsupported planning policy condition");
-          return Object.entries(keys).every(([key, values]) =>
-            array(values).some((value) => value === context[key]),
-          );
-        })
-      ) {
-        continue;
-      }
-      if (statement.Effect === "Deny") return false;
-      assert.equal(statement.Effect, "Allow");
-      allowed = true;
-    }
-  }
-  return allowed;
-}
-
 export function checkPlanningAccess(resources) {
   const role = resources.find((resource) => resource.address === "aws_iam_role.github_planner[0]");
   assert(role, "Missing rendered infrastructure planner role");
@@ -84,7 +51,7 @@ export function checkPlanningAccess(resources) {
   let checks = 0;
   const expect = (action, resource, expected, suppliedContext = context) => {
     assert.equal(
-      planningPermission(policies, action, resource, suppliedContext),
+      iamPermission(policies, action, resource, suppliedContext),
       expected,
       `Planner ${action} ${resource} with ${JSON.stringify(suppliedContext)}`,
     );

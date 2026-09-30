@@ -4,6 +4,10 @@ import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import validateWorkflow from "asl-validator";
 import { checkPlanningAccess } from "./check-planning-access.mjs";
+import {
+  checkApplicationBoundaries,
+  checkBoundedApplicationRoles,
+} from "./check-application-boundaries.mjs";
 
 export const runtimeScenarios = [
   "runtime_preparation_keeps_services_stopped",
@@ -17,9 +21,21 @@ export const planningScenarios = [
   "planning_supports_custom_application_account_and_region",
 ];
 
+export const applicationBoundaryScenarios = [
+  "development_application_boundaries",
+  "production_application_boundaries",
+];
+export const boundedRoleScenarios = ["bounded_application_roles_preserve_runtime_permissions"];
+
 export async function checkInfrastructureTests(
   filename,
-  { requiredWorkflows = [], requiredPlanners = [], report = console.log } = {},
+  {
+    requiredWorkflows = [],
+    requiredPlanners = [],
+    requiredBoundaries = [],
+    requiredBoundedRoles = [],
+    report = console.log,
+  } = {},
 ) {
   const lines = createInterface({
     input: createReadStream(filename),
@@ -27,6 +43,9 @@ export async function checkInfrastructureTests(
   });
   const workflows = new Set();
   const planners = new Set();
+  const boundaryScenarios = new Set();
+  const boundedRoles = new Set();
+  let boundaries;
   const diagnostics = [];
   let summary;
   let failedWorkflow = false;
@@ -39,6 +58,27 @@ export async function checkInfrastructureTests(
     if (event.type === "diagnostic") diagnostics.push(event.diagnostic);
     if (event.type === "test_summary") summary = event.test_summary;
     if (event.type !== "test_state") continue;
+    const renderedResources = event.test_state.root_module?.resources ?? [];
+    if (
+      renderedResources.some(
+        (resource) =>
+          resource.type === "aws_iam_policy" &&
+          resource.address.startsWith("aws_iam_policy.application_permissions_boundary["),
+      )
+    ) {
+      boundaries = checkApplicationBoundaries(renderedResources);
+      boundaryScenarios.add(event["@testrun"]);
+      report(
+        `${event["@testrun"]}: ${boundaries.checks} rendered application boundary checks pass`,
+      );
+    }
+    if (requiredBoundedRoles.includes(event["@testrun"])) {
+      const checks = checkBoundedApplicationRoles(renderedResources, boundaries);
+      boundedRoles.add(event["@testrun"]);
+      report(
+        `${event["@testrun"]}: ${checks} runtime identity-policy operations remain within their bootstrap boundaries`,
+      );
+    }
     if (requiredPlanners.includes(event["@testrun"])) {
       const checks = checkPlanningAccess(event.test_state.root_module?.resources ?? []);
       planners.add(event["@testrun"]);
@@ -89,6 +129,15 @@ export async function checkInfrastructureTests(
   if (missingPlanners.length) {
     throw new Error(`Missing rendered planning scenarios: ${missingPlanners.join(", ")}`);
   }
+  const missingBoundaries = requiredBoundaries.filter(
+    (scenario) => !boundaryScenarios.has(scenario),
+  );
+  const missingRoles = requiredBoundedRoles.filter((scenario) => !boundedRoles.has(scenario));
+  if (missingBoundaries.length || missingRoles.length) {
+    throw new Error(
+      `Missing rendered application boundary evidence: ${[...missingBoundaries, ...missingRoles].join(", ")}`,
+    );
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -103,6 +152,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       await checkInfrastructureTests(filename, {
         requiredWorkflows: module === "aws" ? runtimeScenarios : [],
         requiredPlanners: module === "bootstrap" ? planningScenarios : [],
+        requiredBoundaries: module === "bootstrap" ? applicationBoundaryScenarios : [],
+        requiredBoundedRoles: module === "aws" ? boundedRoleScenarios : [],
       });
     } catch (error) {
       console.error(error.message);

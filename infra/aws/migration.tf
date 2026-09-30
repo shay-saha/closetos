@@ -3,12 +3,14 @@ resource "aws_cloudwatch_log_group" "migration" {
   retention_in_days = var.log_retention_days
 }
 resource "aws_iam_role" "migration_task" {
-  name               = "${local.name}-migration-task"
-  assume_role_policy = local.task_trust
+  name                 = "${local.name}-migration-task"
+  assume_role_policy   = local.task_trust
+  permissions_boundary = var.application_permissions_boundaries_enabled ? "${local.permissions_boundary_prefix}-migration-task-permissions-boundary" : null
 }
 resource "aws_iam_role" "migration_execution" {
-  name               = "${local.name}-migration-execution"
-  assume_role_policy = local.task_trust
+  name                 = "${local.name}-migration-execution"
+  assume_role_policy   = local.task_trust
+  permissions_boundary = var.application_permissions_boundaries_enabled ? "${local.permissions_boundary_prefix}-migration-execution-permissions-boundary" : null
 }
 resource "aws_iam_role_policy" "migration_execution" {
   name = "migration-startup"
