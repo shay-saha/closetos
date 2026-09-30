@@ -29,7 +29,7 @@ def read_json(path):
         ) from None
 
 
-def run(command, *, stdin=None):
+def run(command, *, stdin=None, timeout=900):
     try:
         result = subprocess.run(
             command,
@@ -37,7 +37,7 @@ def run(command, *, stdin=None):
             capture_output=True,
             text=True,
             check=True,
-            timeout=900,
+            timeout=timeout,
             env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off"},
         )
         return result.stdout
