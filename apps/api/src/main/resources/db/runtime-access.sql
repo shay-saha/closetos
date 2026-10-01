@@ -52,7 +52,8 @@ GRANT UPDATE (id) ON TABLE workflow_capacity TO closetos_app;
 
 GRANT SELECT, INSERT ON TABLE identity_authentication, account_removal TO closetos_app;
 GRANT UPDATE (revoked) ON TABLE identity_authentication TO closetos_app;
-GRANT UPDATE (owner_id, provider_subject, state, next_attempt_at, lease_until, attempt_count, failure_code, completed_at)
+GRANT UPDATE (owner_id, provider_subject, state, next_attempt_at, lease_until, attempt_count, failure_code, completed_at,
+    lease_token, data_erased_at, workers_drained_at, provider_erased_at, media_erased_at, media_purge_after)
     ON TABLE account_removal TO closetos_app;
 
 GRANT SELECT, INSERT ON TABLE workflow_task TO closetos_app;

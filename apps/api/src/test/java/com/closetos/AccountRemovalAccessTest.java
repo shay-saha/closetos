@@ -96,7 +96,12 @@ class AccountRemovalAccessTest extends PostgresIntegrationTest {
                         request.requestId());
         jdbc.update("DELETE FROM user_profile WHERE id = ?", owner);
         jdbc.update(
-                "UPDATE account_removal SET owner_id = NULL, provider_subject = NULL, state = 'COMPLETE', completed_at = now() WHERE id = ?",
+                """
+                UPDATE account_removal SET owner_id = NULL, provider_subject = NULL, state = 'COMPLETE', completed_at = now(),
+                    data_erased_at = now() - interval '16 minutes', workers_drained_at = now() - interval '15 minutes',
+                    provider_erased_at = now() - interval '15 minutes', media_purge_after = now() - interval '1 minute', media_erased_at = now()
+                WHERE id = ?
+                """,
                 request.requestId());
         assertThat(revocations.revoked(subject)).isTrue();
         assertThat(

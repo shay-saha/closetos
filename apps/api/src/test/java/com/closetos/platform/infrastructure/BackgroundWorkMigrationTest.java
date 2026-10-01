@@ -131,7 +131,7 @@ class BackgroundWorkMigrationTest {
                 scopedJob,
                 obsoleteEvent);
 
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(2);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(3);
         assertThat(
                         jdbc.queryForList(
                                 "SELECT wardrobe_id FROM outbox_event WHERE id IN (?, ?, ?, ?, ?)",
