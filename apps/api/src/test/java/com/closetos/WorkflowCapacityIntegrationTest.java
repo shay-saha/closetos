@@ -155,13 +155,28 @@ class WorkflowCapacityIntegrationTest extends PostgresIntegrationTest {
 
     @Test
     void capacityDeferralDoesNotConsumeTheOutboxFailureBudget() {
+        UUID owner = UUID.randomUUID(), wardrobe = UUID.randomUUID();
+        jdbc.sql(
+                        "INSERT INTO user_profile(id, cognito_sub, display_name) VALUES (:id, :subject, 'Capacity test')")
+                .param("id", owner)
+                .param("subject", "capacity-" + owner)
+                .update();
+        jdbc.sql("INSERT INTO wardrobe(id, owner_id, name) VALUES (:id, :owner, 'Wardrobe')")
+                .param("id", wardrobe)
+                .param("owner", owner)
+                .update();
         var job = job();
         String key = "slot-test:" + job.jobId();
         new TransactionTemplate(transactions)
                 .executeWithoutResult(
                         transaction ->
                                 outbox.enqueue(
-                                        "image", job.imageId(), "START_PROCESSING", key, job));
+                                        wardrobe,
+                                        "image",
+                                        job.imageId(),
+                                        "START_PROCESSING",
+                                        key,
+                                        job));
         for (int attempt = 0; attempt < 8; attempt++) {
             var event = queue.claim(Set.of("START_PROCESSING")).getFirst();
             assertThat(event.publishAttempts()).isEqualTo(1);

@@ -261,11 +261,20 @@ class MediaHttpTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void outboxRollsBackWithTransactionAndLeasesExcludeDuplicateClaims() {
+    void outboxRollsBackWithTransactionAndLeasesExcludeDuplicateClaims() throws Exception {
+        String subject = "outbox-" + UUID.randomUUID();
+        mvc.perform(as(get("/api/v1/wardrobes/current"), subject)).andExpect(status().isOk());
+        UUID wardrobe =
+                jdbc.sql(
+                                "SELECT w.id FROM wardrobe w JOIN user_profile p ON p.id = w.owner_id WHERE p.cognito_sub = :subject")
+                        .param("subject", subject)
+                        .query(UUID.class)
+                        .single();
         UUID aggregate = UUID.randomUUID();
         transaction.executeWithoutResult(
                 status -> {
                     outbox.enqueue(
+                            wardrobe,
                             "test",
                             aggregate,
                             "TEST",
@@ -282,6 +291,7 @@ class MediaHttpTest extends PostgresIntegrationTest {
         transaction.executeWithoutResult(
                 status ->
                         outbox.enqueue(
+                                wardrobe,
                                 "test",
                                 aggregate,
                                 "TEST",

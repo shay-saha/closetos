@@ -81,6 +81,7 @@ public class ReembeddingJobStore {
         for (var target : garments.embeddingTargets(wardrobe)) {
             String eventKey = "reembedding:" + id + ":" + target.garmentId();
             outbox.enqueue(
+                    target.wardrobeId(),
                     "garment",
                     target.garmentId(),
                     "REBUILD_EMBEDDING",

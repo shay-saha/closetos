@@ -54,7 +54,7 @@ class DatabaseMigrationTest {
 
     @Test
     void migratesAnEmptyDatabaseAndSafelyReplaysWithoutStartingSpring() throws Exception {
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(14);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(15);
         assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isZero();
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
                         statement.executeQuery(
                                 "SELECT count(*) FROM flyway_schema_history WHERE success")) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getInt(1)).isEqualTo(14);
+            assertThat(result.getInt(1)).isEqualTo(15);
         }
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -108,7 +108,7 @@ class DatabaseMigrationTest {
                         'arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:garment-image-00000000-0000-4000-8000-000000000004-pipeline-1-r1','PROCESSING_MEDIA',1)
                     """);
         }
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(5);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(6);
         try (var connection = connect();
                 var statement = connection.createStatement();
                 var result =
@@ -353,7 +353,7 @@ class DatabaseMigrationTest {
                             ownerPassword,
                             "APPLICATION_DATABASE_PASSWORD",
                             runtimePassword);
-            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(14);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(15);
             assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
             try (var connection =
                             DriverManager.getConnection(

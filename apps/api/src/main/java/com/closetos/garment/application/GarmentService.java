@@ -105,12 +105,14 @@ public class GarmentService implements com.closetos.garment.api.GarmentAccess {
     }
 
     private void enqueueEmbedding(GarmentDetails garment) {
+        UUID wardrobeId = wardrobe.currentWardrobeId();
         outbox.enqueue(
+                wardrobeId,
                 "garment",
                 garment.id(),
                 "GENERATE_EMBEDDING",
                 "embedding:" + garment.id() + ":" + garment.version(),
-                Map.of("wardrobeId", wardrobe.currentWardrobeId()));
+                Map.of("wardrobeId", wardrobeId));
     }
 
     @Override

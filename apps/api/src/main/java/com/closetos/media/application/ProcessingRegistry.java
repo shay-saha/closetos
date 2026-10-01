@@ -90,7 +90,13 @@ public class ProcessingRegistry implements ProcessingAccess {
                 .param("pipeline", pipeline)
                 .param("attempt", attempt)
                 .update();
-        outbox.enqueue("image", image.id(), "START_PROCESSING", "process:" + jobId, job);
+        outbox.enqueue(
+                image.wardrobeId(),
+                "image",
+                image.id(),
+                "START_PROCESSING",
+                "process:" + jobId,
+                job);
         return job;
     }
 
@@ -210,6 +216,7 @@ public class ProcessingRegistry implements ProcessingAccess {
         ImageRecord image = media.ownedImage(job.imageId(), job.wardrobeId());
         if (image.deleteOriginalAfterIsolation())
             outbox.enqueue(
+                    image.wardrobeId(),
                     "image",
                     image.id(),
                     "DELETE_ORIGINAL",

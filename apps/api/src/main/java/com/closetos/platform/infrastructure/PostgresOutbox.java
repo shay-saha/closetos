@@ -30,14 +30,20 @@ class PostgresOutbox implements OutboxAccess, OutboxQueue {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void enqueue(
-            String aggregateType, UUID aggregateId, String eventType, String key, Object payload) {
+            UUID wardrobeId,
+            String aggregateType,
+            UUID aggregateId,
+            String eventType,
+            String key,
+            Object payload) {
         jdbc.sql(
                         """
-                INSERT INTO outbox_event (id, aggregate_type, aggregate_id, event_type, idempotency_key, payload)
-                VALUES (:id, :type, :aggregate, :event, :key, CAST(:payload AS jsonb))
+                INSERT INTO outbox_event (id, wardrobe_id, aggregate_type, aggregate_id, event_type, idempotency_key, payload)
+                VALUES (:id, :wardrobe, :type, :aggregate, :event, :key, CAST(:payload AS jsonb))
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """)
                 .param("id", UUID.randomUUID())
+                .param("wardrobe", wardrobeId)
                 .param("type", aggregateType)
                 .param("aggregate", aggregateId)
                 .param("event", eventType)

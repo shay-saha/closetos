@@ -4,5 +4,10 @@ import java.util.UUID;
 
 public interface OutboxAccess {
     void enqueue(
-            String aggregateType, UUID aggregateId, String eventType, String key, Object payload);
+            UUID wardrobeId,
+            String aggregateType,
+            UUID aggregateId,
+            String eventType,
+            String key,
+            Object payload);
 }

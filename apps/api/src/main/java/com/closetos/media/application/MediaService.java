@@ -228,6 +228,7 @@ public class MediaService implements MediaAccess {
     public void deleteImage(UUID id, UUID wardrobe) {
         ImageRecord image = ownedImage(id, wardrobe);
         outbox.enqueue(
+                wardrobe,
                 "image",
                 id,
                 "DELETE_MEDIA",
@@ -238,6 +239,7 @@ public class MediaService implements MediaAccess {
                 .param("wardrobe", wardrobe)
                 .update();
         outbox.enqueue(
+                wardrobe,
                 "garment",
                 image.garmentId(),
                 "GENERATE_EMBEDDING",
