@@ -1,6 +1,7 @@
 import logging
 
 from closetos_media.analysis import AnalysisPort
+from closetos_media.execution import CancellableStorage, Cancellation, ProcessingCancelled
 from closetos_media.imaging import transform
 from closetos_media.models import ProcessingResult, WorkflowJob
 from closetos_media.segmentation import GarmentSegmentationPort
@@ -48,6 +49,8 @@ class Pipeline:
                 )
             else:
                 result.analysis_failure = "ANALYSIS_NOT_CONFIGURED"
+        except ProcessingCancelled:
+            raise
         except Exception as error:
             # Analysis is optional; a successful isolation must remain available for manual review.
             LOG.warning("Analysis failed for job %s (%s)", job.job_id, type(error).__name__)
@@ -56,7 +59,13 @@ class Pipeline:
         self.storage.write(key, result.model_dump_json(by_alias=True).encode(), "application/json")
         return result
 
-    def process(self, job: WorkflowJob) -> ProcessingResult:
+    def process(
+        self, job: WorkflowJob, cancellation: Cancellation | None = None
+    ) -> ProcessingResult:
+        if cancellation is not None:
+            return Pipeline(
+                CancellableStorage(self.storage, cancellation), self.segmentation, self.analysis
+            ).process(job)
         existing = self.storage.optional_json(job.output_prefix + "manifest.json")
         if existing:
             return self.validated_result(job, existing)

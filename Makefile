@@ -20,6 +20,7 @@ test-worker:
 test-worker-container:
 	docker build -f workers/media-processor/Dockerfile -t closetos-media:local-runtime .
 	uv run --project workers/media-processor python scripts/check-worker-container.py
+	python3 scripts/check-worker-cancellation.py
 
 test-migration-container:
 	docker build -t closetos-api:local-runtime apps/api

@@ -3,7 +3,9 @@ import os
 import secrets
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, Header, HTTPException
@@ -17,6 +19,7 @@ from closetos_media.embeddings import (
     EmbeddingUnavailable,
     configured_embedder,
 )
+from closetos_media.execution import ExecutionRegistry, ProcessingBusy, ProcessingCancelled
 from closetos_media.models import ProcessingResult, WorkflowJob
 from closetos_media.pipeline import Pipeline
 from closetos_media.segmentation import BiRefNetSegmentation
@@ -35,7 +38,14 @@ async def lifespan(app: FastAPI):
     app.state.embeddings = EmbeddingService(configured_embedder(), storage)
     app.state.embedding_capacity = threading.BoundedSemaphore(2)
     app.state.capacity = threading.BoundedSemaphore(1)
-    yield
+    default_state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
+    app.state.executions = ExecutionRegistry(
+        Path(os.environ.get("MEDIA_WORKER_STATE_DIR", str(default_state / "closetos/media-worker")))
+    )
+    try:
+        yield
+    finally:
+        app.state.executions.close()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -48,7 +58,9 @@ def health():
 
 def authenticate(authorization: str | None):
     expected = "Bearer " + app.state.token
-    if not authorization or not secrets.compare_digest(authorization, expected):
+    if not authorization or not secrets.compare_digest(
+        authorization.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(401, "Authentication required")
 
 
@@ -87,9 +99,29 @@ def process(job: WorkflowJob, authorization: Annotated[str | None, Header()] = N
     if not app.state.capacity.acquire(blocking=False):
         raise HTTPException(503, "The worker is busy", headers={"Retry-After": "5"})
     try:
-        return app.state.pipeline.process(job)
+        with app.state.executions.track(job) as cancellation:
+            result = app.state.pipeline.process(job, cancellation)
+            cancellation.checkpoint()
+            return result
+    except ProcessingCancelled as error:
+        raise HTTPException(410, "Processing was cancelled") from error
+    except ProcessingBusy as error:
+        raise HTTPException(
+            503, "This job is already running", headers={"Retry-After": "5"}
+        ) from error
+    except OSError as error:
+        raise HTTPException(503, "Worker cancellation status is unavailable") from error
     except ValueError as error:
         LOG.info("Invalid photograph for job %s (%s)", job.job_id, type(error).__name__)
         raise HTTPException(422, "The photograph could not be processed") from error
     finally:
         app.state.capacity.release()
+
+
+@app.post("/owners/{owner_id}/cancel")
+def cancel_owner(owner_id: UUID, authorization: Annotated[str | None, Header()] = None):
+    authenticate(authorization)
+    try:
+        return {"drained": app.state.executions.cancel_owner(owner_id)}
+    except OSError as error:
+        raise HTTPException(503, "Worker cancellation status is unavailable") from error

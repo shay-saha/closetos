@@ -36,7 +36,8 @@ class WorkflowJob(WireModel):
         parts = self.source_key.split("/")
         if len(parts) != 7 or parts[0] != "users" or parts[2] != "garments":
             raise ValueError("Invalid source object scope")
-        UUID(parts[1])
+        if parts[1] != str(UUID(parts[1])):
+            raise ValueError("Invalid owner object scope")
         if parts[3] != str(self.garment_id) or parts[4] != "images":
             raise ValueError("Source object belongs to another garment")
         if parts[5] != str(self.image_id) or not parts[6].startswith("original."):
@@ -45,6 +46,10 @@ class WorkflowJob(WireModel):
         if self.output_prefix != prefix:
             raise ValueError("Invalid output object scope")
         return self
+
+    @property
+    def owner_id(self) -> UUID:
+        return UUID(self.source_key.split("/")[1])
 
 
 class AssetDescriptor(WireModel):
