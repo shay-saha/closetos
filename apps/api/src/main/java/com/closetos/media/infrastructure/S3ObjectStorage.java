@@ -4,11 +4,14 @@ import com.closetos.media.api.ImageRecord;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.UploadInstructions;
 import com.closetos.platform.api.DomainException;
+import com.closetos.platform.api.MediaSigningAdmission;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -21,27 +24,58 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 @Component
 class S3ObjectStorage implements ObjectStoragePort {
+    private static final String UUID_PATTERN =
+            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+    private static final Pattern PHOTO_KEY =
+            Pattern.compile(
+                    "users/("
+                            + UUID_PATTERN
+                            + ")/garments/"
+                            + UUID_PATTERN
+                            + "/images/"
+                            + UUID_PATTERN
+                            + "/(original\\.(jpg|jpeg|png|webp|heic|heif)|pipelines/[0-9]+-r[1-5]/((isolated|display|card|thumbnail)\\.webp|mask\\.png))");
     private final S3Client s3;
     private final S3Presigner signer;
     private final MediaDownloadSigner downloadSigner;
     private final Clock clock;
     private final String bucket;
+    private final MediaSigningAdmission admission;
 
     S3ObjectStorage(
             S3Client s3,
             S3Presigner signer,
             MediaDownloadSigner downloadSigner,
             Clock clock,
-            @Value("${closetos.media.bucket:closetos}") String bucket) {
+            @Value("${closetos.media.bucket:closetos}") String bucket,
+            MediaSigningAdmission admission) {
         this.s3 = s3;
         this.signer = signer;
         this.downloadSigner = downloadSigner;
         this.clock = clock;
         this.bucket = bucket;
+        this.admission = admission;
     }
 
     @Override
     public UploadInstructions signUpload(ImageRecord image) {
+        String prefix =
+                "users/"
+                        + image.userId()
+                        + "/garments/"
+                        + image.garmentId()
+                        + "/images/"
+                        + image.id()
+                        + "/";
+        if (image.sourceS3Key() == null
+                || !image.sourceS3Key()
+                        .matches(
+                                Pattern.quote(prefix) + "original\\.(jpg|jpeg|png|webp|heic|heif)"))
+            throw DomainException.invalid("Invalid original photograph key.");
+        return admission.sign(image.userId(), () -> uploadInstructions(image));
+    }
+
+    private UploadInstructions uploadInstructions(ImageRecord image) {
         var request =
                 PutObjectRequest.builder()
                         .bucket(bucket)
@@ -70,7 +104,23 @@ class S3ObjectStorage implements ObjectStoragePort {
 
     @Override
     public String signDownload(String key, Instant expiresAt) {
-        return downloadSigner.sign(key, expiresAt);
+        var match = PHOTO_KEY.matcher(key == null ? "" : key);
+        if (!match.matches()) throw DomainException.invalid("Invalid media key.");
+        UUID owner = UUID.fromString(match.group(1));
+        return admission.sign(
+                owner,
+                () -> {
+                    Duration lifetime =
+                            expiresAt == null
+                                    ? Duration.ZERO
+                                    : Duration.between(clock.instant(), expiresAt);
+                    if (lifetime.isNegative()
+                            || lifetime.isZero()
+                            || lifetime.compareTo(Duration.ofMinutes(15)) > 0)
+                        throw DomainException.invalid(
+                                "Photo links must expire within fifteen minutes.");
+                    return downloadSigner.sign(key, expiresAt);
+                });
     }
 
     @Override

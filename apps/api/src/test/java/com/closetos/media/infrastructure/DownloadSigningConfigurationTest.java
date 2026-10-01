@@ -2,14 +2,17 @@ package com.closetos.media.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.closetos.platform.api.MediaSigningAdmission;
 import java.net.URI;
 import java.security.KeyPairGenerator;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -24,6 +27,15 @@ class DownloadSigningConfigurationTest {
             new ApplicationContextRunner()
                     .withUserConfiguration(DownloadSigningConfiguration.class)
                     .withBean(Clock.class, () -> Clock.fixed(NOW, ZoneOffset.UTC))
+                    .withBean(
+                            MediaSigningAdmission.class,
+                            () -> {
+                                var admission = mock(MediaSigningAdmission.class);
+                                doAnswer(call -> call.<Supplier<?>>getArgument(1).get())
+                                        .when(admission)
+                                        .sign(any(), any());
+                                return admission;
+                            })
                     .withBean(S3Presigner.class, () -> mock(S3Presigner.class));
 
     @Test
@@ -53,7 +65,8 @@ class DownloadSigningConfigurationTest {
                                             application.getBean(S3Presigner.class),
                                             signing,
                                             application.getBean(Clock.class),
-                                            "media-bucket");
+                                            "media-bucket",
+                                            application.getBean(MediaSigningAdmission.class));
                             String derivative =
                                     "users/00000000-0000-4000-8000-000000000001/garments/00000000-0000-4000-8000-000000000002/images/00000000-0000-4000-8000-000000000003/pipelines/1-r1/card.webp";
                             String url = storage.signDownload(derivative, NOW.plusSeconds(900));

@@ -1,6 +1,7 @@
 package com.closetos.media.infrastructure;
 
 import com.closetos.media.api.PersonalPhotoDownloads;
+import com.closetos.platform.api.MediaSigningAdmission;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,14 +17,17 @@ class S3PersonalPhotoDownloads implements PersonalPhotoDownloads {
     private final S3Presigner signer;
     private final Clock clock;
     private final String bucket;
+    private final MediaSigningAdmission admission;
 
     S3PersonalPhotoDownloads(
             S3Presigner signer,
             Clock clock,
-            @Value("${closetos.media.bucket:closetos}") String bucket) {
+            @Value("${closetos.media.bucket:closetos}") String bucket,
+            MediaSigningAdmission admission) {
         this.signer = signer;
         this.clock = clock;
         this.bucket = bucket;
+        this.admission = admission;
     }
 
     @Override
@@ -43,18 +47,23 @@ class S3PersonalPhotoDownloads implements PersonalPhotoDownloads {
                 || lifetime.compareTo(Duration.ofMinutes(15)) > 0)
             throw new IllegalArgumentException(
                     "Photograph download links must expire within fifteen minutes.");
-        return signer.presignGetObject(
-                        GetObjectPresignRequest.builder()
-                                .signatureDuration(lifetime)
-                                .getObjectRequest(
-                                        GetObjectRequest.builder()
-                                                .bucket(bucket)
-                                                .key(key)
-                                                .responseCacheControl("private, no-store")
-                                                .responseContentDisposition("attachment")
+        return admission.sign(
+                owner,
+                () ->
+                        signer.presignGetObject(
+                                        GetObjectPresignRequest.builder()
+                                                .signatureDuration(lifetime)
+                                                .getObjectRequest(
+                                                        GetObjectRequest.builder()
+                                                                .bucket(bucket)
+                                                                .key(key)
+                                                                .responseCacheControl(
+                                                                        "private, no-store")
+                                                                .responseContentDisposition(
+                                                                        "attachment")
+                                                                .build())
                                                 .build())
-                                .build())
-                .url()
-                .toString();
+                                .url()
+                                .toString());
     }
 }

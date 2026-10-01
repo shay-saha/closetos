@@ -3,11 +3,13 @@ package com.closetos.media.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.closetos.platform.api.MediaSigningAdmission;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -22,13 +24,20 @@ class PersonalPhotoDownloadsTest {
             image = UUID.randomUUID();
     private final String prefix =
             "users/" + owner + "/garments/" + garment + "/images/" + image + "/";
+    private final MediaSigningAdmission admission =
+            new MediaSigningAdmission() {
+                @Override
+                public <T> T sign(UUID owner, Supplier<T> operation) {
+                    return operation.get();
+                }
+            };
 
     @Test
     void signsOwnedOriginalsAndDerivativesForPrivateUncachedDownloads() {
         try (var presigner = signer()) {
             var downloads =
                     new S3PersonalPhotoDownloads(
-                            presigner, Clock.fixed(now, ZoneOffset.UTC), "closetos");
+                            presigner, Clock.fixed(now, ZoneOffset.UTC), "closetos", admission);
             for (String tail :
                     new String[] {
                         "original.jpg",
@@ -61,7 +70,7 @@ class PersonalPhotoDownloadsTest {
         try (var presigner = signer()) {
             var downloads =
                     new S3PersonalPhotoDownloads(
-                            presigner, Clock.fixed(now, ZoneOffset.UTC), "closetos");
+                            presigner, Clock.fixed(now, ZoneOffset.UTC), "closetos", admission);
             for (String key :
                     new String[] {
                         prefix.replace(owner.toString(), UUID.randomUUID().toString())
