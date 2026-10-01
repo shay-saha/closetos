@@ -5,9 +5,12 @@ import { webcrypto, randomUUID } from "node:crypto";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { UploadEngine } from "./upload-engine";
 import { uploadStore, type QueuedUpload } from "./upload-store";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
-vi.mock("@/lib/api", () => ({ api: vi.fn() }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  api: vi.fn(),
+}));
 const apiMock = vi.mocked(api);
 const engines: UploadEngine[] = [];
 
@@ -42,6 +45,133 @@ function stored(owner: string, patch: Partial<QueuedUpload> = {}): QueuedUpload 
     ...patch,
   };
 }
+
+function uploadResponse(status: number) {
+  const requests: {
+    open: ReturnType<typeof vi.fn>;
+    setRequestHeader: ReturnType<typeof vi.fn>;
+    send: ReturnType<typeof vi.fn>;
+  }[] = [];
+  vi.stubGlobal(
+    "XMLHttpRequest",
+    class {
+      status = status;
+      timeout = 0;
+      upload = {};
+      open = vi.fn();
+      setRequestHeader = vi.fn();
+      onload = () => {};
+      onloadend = () => {};
+      onabort = () => {};
+      send = vi.fn(() => {
+        queueMicrotask(() => {
+          this.onload();
+          this.onloadend();
+        });
+      });
+      abort() {
+        this.onabort();
+        this.onloadend();
+      }
+      constructor() {
+        requests.push(this);
+      }
+    },
+  );
+  return requests;
+}
+
+function reservation() {
+  return {
+    garmentId: randomUUID(),
+    imageId: randomUUID(),
+    upload: {
+      method: "PUT",
+      url: "https://storage.example.test/signed-photo",
+      headers: { "Content-Type": "image/png", "If-None-Match": "*" },
+    },
+  };
+}
+
+it.each([200, 412])(
+  "confirms a conditional upload through owned processing after HTTP %i",
+  async (status) => {
+    const owner = randomUUID();
+    const item = stored(owner);
+    const reserved = reservation();
+    await uploadStore.save(item);
+    const requests = uploadResponse(status);
+    apiMock.mockResolvedValueOnce(reserved).mockResolvedValueOnce({ state: "READY_FOR_REVIEW" });
+    const instance = engine(owner);
+    await instance.start();
+    await vi.waitFor(() => expect(instance.snapshot()[0].state).toBe("ready"));
+    expect(requests).toHaveLength(1);
+    expect(requests[0].open).toHaveBeenCalledWith("PUT", reserved.upload.url);
+    expect(requests[0].setRequestHeader).toHaveBeenCalledWith("If-None-Match", "*");
+    expect(requests[0].send.mock.calls[0][0]).toHaveProperty("size", 4);
+    expect(apiMock).toHaveBeenLastCalledWith(`processing/${reserved.imageId}`, expect.anything());
+    expect((await uploadStore.list(owner))[0].file).toBeUndefined();
+  },
+);
+
+it("retains the local photograph while an existing object awaits processing admission", async () => {
+  const owner = randomUUID();
+  const item = stored(owner);
+  const reserved = reservation();
+  await uploadStore.save(item);
+  uploadResponse(412);
+  apiMock.mockResolvedValueOnce(reserved).mockResolvedValue({ state: "AWAITING_UPLOAD" });
+  const instance = engine(owner);
+  await instance.start();
+  await vi.waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+  expect(instance.snapshot()[0].state).toBe("processing");
+  expect((await uploadStore.list(owner))[0].file?.size).toBe(4);
+});
+
+it("keeps the photograph and reports failure when the existing image was removed", async () => {
+  const owner = randomUUID();
+  const item = stored(owner);
+  await uploadStore.save(item);
+  uploadResponse(412);
+  apiMock
+    .mockResolvedValueOnce(reservation())
+    .mockRejectedValueOnce(new ApiError(404, "Image not found."));
+  const instance = engine(owner);
+  await instance.start();
+  await vi.waitFor(() => expect(instance.snapshot()[0].state).toBe("failed"));
+  expect(instance.snapshot()[0].error).toBe("Image not found.");
+  expect((await uploadStore.list(owner))[0].file?.size).toBe(4);
+});
+
+it.each([403, 409, 500])(
+  "retains the file and does not poll processing after HTTP %i",
+  async (status) => {
+    const owner = randomUUID();
+    await uploadStore.save(stored(owner));
+    uploadResponse(status);
+    apiMock.mockResolvedValueOnce(reservation());
+    const instance = engine(owner);
+    await instance.start();
+    await vi.waitFor(() => expect(instance.snapshot()[0].state).toBe("failed"));
+    expect(apiMock).toHaveBeenCalledOnce();
+    expect((await uploadStore.list(owner))[0].file?.size).toBe(4);
+  },
+);
+
+it("does not treat an unexpected precondition failure as a completed upload", async () => {
+  const owner = randomUUID();
+  await uploadStore.save(stored(owner));
+  uploadResponse(412);
+  apiMock.mockResolvedValueOnce({
+    ...reservation(),
+    upload: { method: "PUT", url: "https://storage.example.test/photo", headers: {} },
+  });
+  const instance = engine(owner);
+  await instance.start();
+  await vi.waitFor(() => expect(instance.snapshot()[0].state).toBe("failed"));
+  expect(apiMock).toHaveBeenCalledOnce();
+  expect((await uploadStore.list(owner))[0].file?.size).toBe(4);
+});
 
 it("recovers interrupted uploads under the same idempotency key and isolates owners", async () => {
   const owner = randomUUID();

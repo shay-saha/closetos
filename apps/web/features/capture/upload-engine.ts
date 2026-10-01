@@ -26,7 +26,11 @@ function put(
       if (event.lengthComputable) progress(Math.round((event.loaded / event.total) * 100));
     };
     request.onload = () =>
-      request.status >= 200 && request.status < 300
+      (request.status >= 200 && request.status < 300) ||
+      (request.status === 412 &&
+        Object.entries(reservation.upload.headers).some(
+          ([name, value]) => name.toLowerCase() === "if-none-match" && value === "*",
+        ))
         ? resolve()
         : reject(new Error("The photograph could not be uploaded. Please retry."));
     request.onerror = request.ontimeout = () =>
@@ -189,6 +193,7 @@ export class UploadEngine {
 
   private async run(item: QueuedUpload) {
     const signal = this.controller.signal;
+    let awaitingAcceptance = Boolean(item.file);
     try {
       if (item.state === "queued") {
         if (!item.file) throw new Error("Choose this photograph again to upload it.");
@@ -216,12 +221,16 @@ export class UploadEngine {
           );
           this.emit();
         });
-        await this.update(item.id, { state: "processing", file: undefined, progress: 100 });
+        await this.update(item.id, { state: "processing", progress: 100 });
         item = { ...item, garmentId: reservation.garmentId, imageId: reservation.imageId };
       }
       if (!item.imageId) throw new Error("This upload has no photograph to process.");
       while (!signal.aborted) {
         const progress = await api<Processing>(`processing/${item.imageId}`, { signal });
+        if (awaitingAcceptance && progress.state !== "AWAITING_UPLOAD") {
+          await this.update(item.id, { file: undefined });
+          awaitingAcceptance = false;
+        }
         if (["READY", "READY_FOR_REVIEW"].includes(progress.state)) {
           await this.update(item.id, {
             state: progress.state === "READY" ? "reviewed" : "ready",

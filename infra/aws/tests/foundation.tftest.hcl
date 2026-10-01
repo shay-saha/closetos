@@ -51,6 +51,14 @@ run "development_security_and_cost_boundaries" {
     error_message = "Direct uploads must use the application's HTTPS origin."
   }
   assert {
+    condition     = contains(one(aws_s3_bucket_cors_configuration.media.cors_rule).allowed_headers, "if-none-match")
+    error_message = "Browser uploads must be allowed to send their signed conditional-write header."
+  }
+  assert {
+    condition     = { for statement in jsondecode(aws_s3_bucket_policy.media.policy).Statement : statement.Sid => statement }["RequireConditionalOriginalWrites"] == { Sid = "RequireConditionalOriginalWrites", Effect = "Deny", Principal = "*", Action = "s3:PutObject", Resource = "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/original.*", Condition = { Null = { "s3:if-none-match" = "true", "s3:if-match" = "true" } } }
+    error_message = "Original photographs require create-if-absent uploads or an ETag-checked replacement for erasure; derivative writes remain unaffected."
+  }
+  assert {
     condition     = aws_cloudfront_distribution.media.default_cache_behavior[0].viewer_protocol_policy == "https-only" && length(aws_cloudfront_distribution.media.default_cache_behavior[0].trusted_key_groups) == 1 && aws_cloudfront_origin_access_control.media.signing_behavior == "always"
     error_message = "CloudFront must require HTTPS, signed viewer requests, and signed origin requests."
   }

@@ -28,7 +28,7 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   cors_rule {
     allowed_origins = [local.origin]
     allowed_methods = ["PUT", "GET", "HEAD"]
-    allowed_headers = ["content-type", "x-amz-checksum-sha256", "x-amz-*", "authorization"]
+    allowed_headers = ["content-type", "if-none-match", "x-amz-checksum-sha256", "x-amz-*", "authorization"]
     expose_headers  = ["ETag", "x-amz-checksum-sha256"]
     max_age_seconds = 600
   }
@@ -113,6 +113,19 @@ resource "aws_s3_bucket_policy" "media" {
         Action    = "s3:GetObject"
         Resource  = "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/pipelines/*/*.webp"
         Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.media.arn } }
+      },
+      {
+        Sid       = "RequireConditionalOriginalWrites"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/original.*"
+        Condition = {
+          Null = {
+            "s3:if-none-match" = "true"
+            "s3:if-match"      = "true"
+          }
+        }
       }
     ]
   })

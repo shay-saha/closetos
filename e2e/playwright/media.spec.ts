@@ -86,6 +86,7 @@ test("signed direct upload, real isolation, private retrieval, and media cleanup
   });
   expect(response.status()).toBe(201);
   const reserved = await response.json();
+  expect(reserved.upload.headers["If-None-Match"]).toBe("*");
   const replay = await page.request.post("/api/backend/garments/uploads", {
     headers,
     data: request,
@@ -104,6 +105,18 @@ test("signed direct upload, real isolation, private retrieval, and media cleanup
     { upload: reserved.upload, bytes: [...photograph] },
   );
   expect(uploaded).toEqual({ status: 200, detail: "" });
+  const repeated = await page.evaluate(
+    async ({ upload, bytes }) => {
+      const result = await fetch(upload.url, {
+        method: upload.method,
+        headers: upload.headers,
+        body: new Uint8Array(bytes),
+      });
+      return result.status;
+    },
+    { upload: reserved.upload, bytes: [...photograph] },
+  );
+  expect(repeated).toBe(412);
 
   await expect
     .poll(

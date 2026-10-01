@@ -79,6 +79,8 @@ class MediaStorageAdmissionTest {
             var upload = storage(realSigner).signUpload(image(prefix + "original.png"));
             assertThat(URI.create(upload.url()).getPath()).isEqualTo("/" + prefix + "original.png");
             assertThat(upload.url()).contains("X-Amz-Expires=600");
+            assertThat(upload.url()).contains("if-none-match");
+            assertThat(upload.headers()).containsEntry("If-None-Match", "*");
             assertThat(upload.expiresAt()).isEqualTo(now.plusSeconds(600));
             verify(admission).sign(eq(owner), any());
         }

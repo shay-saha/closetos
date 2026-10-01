@@ -83,6 +83,7 @@ class S3ObjectStorage implements ObjectStoragePort {
                         .contentType(image.mimeType())
                         .contentLength(image.expectedSize())
                         .checksumSHA256(image.sourceChecksum())
+                        .ifNoneMatch("*")
                         .build();
         Duration lifetime = Duration.ofMinutes(10);
         var signed =
@@ -98,7 +99,9 @@ class S3ObjectStorage implements ObjectStoragePort {
                         "Content-Type",
                         image.mimeType(),
                         "x-amz-checksum-sha256",
-                        image.sourceChecksum()),
+                        image.sourceChecksum(),
+                        "If-None-Match",
+                        "*"),
                 clock.instant().plus(lifetime));
     }
 
