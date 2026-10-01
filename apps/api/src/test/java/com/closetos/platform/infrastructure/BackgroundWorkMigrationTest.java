@@ -131,7 +131,7 @@ class BackgroundWorkMigrationTest {
                 scopedJob,
                 obsoleteEvent);
 
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(1);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(2);
         assertThat(
                         jdbc.queryForList(
                                 "SELECT wardrobe_id FROM outbox_event WHERE id IN (?, ?, ?, ?, ?)",
@@ -201,6 +201,71 @@ class BackgroundWorkMigrationTest {
                                 "SELECT max(version) FROM flyway_schema_history WHERE success",
                                 String.class))
                 .isEqualTo("014");
+    }
+
+    @Test
+    void upgradingClearsRequestersOfBothPendingAndCompletedRemovals() {
+        var pending = wardrobe();
+        var complete = wardrobe();
+        String pendingSubject = "background-migration-" + pending.owner();
+        String completeSubject = "background-migration-" + complete.owner();
+        for (var owner : new Owner[] {pending, complete}) {
+            String subject = "background-migration-" + owner.owner();
+            jdbc.update(
+                    """
+                    INSERT INTO account_removal(id, subject_hash, owner_id, provider_subject, requested_at, next_attempt_at)
+                    VALUES (?, encode(sha256(convert_to(?, 'UTF8')), 'hex'), ?, ?, now(), now())
+                    """,
+                    UUID.randomUUID(),
+                    subject,
+                    owner.owner(),
+                    subject);
+        }
+        jdbc.update("DELETE FROM user_profile WHERE id = ?", complete.owner());
+        jdbc.update(
+                "UPDATE account_removal SET owner_id = NULL, provider_subject = NULL, state = 'COMPLETE', completed_at = now() WHERE owner_id = ?",
+                complete.owner());
+        String model = "b".repeat(64);
+        jdbc.update(
+                "INSERT INTO embedding_model(model_key, provider, model_id, pipeline_version, dimensions) VALUES (?, 'test', 'test-model', '1', 256)",
+                model);
+        UUID pendingJob = job(null, model),
+                completedJob = job(null, model),
+                activeJob = job(null, model);
+        jdbc.update(
+                "UPDATE reembedding_job SET requested_by = ? WHERE id = ?",
+                pendingSubject,
+                pendingJob);
+        jdbc.update(
+                "UPDATE reembedding_job SET requested_by = ? WHERE id = ?",
+                completeSubject,
+                completedJob);
+
+        DatabaseMigration.migrate(environment);
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                pendingJob))
+                .isNull();
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                completedJob))
+                .isNull();
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                activeJob))
+                .isEqualTo("migration-admin");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT count(*) FROM identity_authentication WHERE subject_hash = encode(sha256(convert_to('migration-admin', 'UTF8')), 'hex') AND NOT revoked",
+                                Integer.class))
+                .isEqualTo(1);
     }
 
     private Owner wardrobe() {

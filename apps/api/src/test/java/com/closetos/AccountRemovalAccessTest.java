@@ -13,6 +13,7 @@ import com.closetos.platform.api.IdentityRevocations;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -246,6 +247,202 @@ class AccountRemovalAccessTest extends PostgresIntegrationTest {
         assertThat(revocations.revoked(null)).isTrue();
         assertThat(revocations.revoked(" ")).isTrue();
         assertThat(revocations.revoked("x".repeat(129))).isTrue();
+    }
+
+    @Test
+    void removalErasesTheRequesterFromGlobalJobsAndPreventsLateRequestsOrReattachment() {
+        String subject = subject(), other = subject();
+        UUID job = globalEmbeddingJob(subject), otherJob = globalEmbeddingJob(other);
+        as(subject, removals::request);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                job))
+                .isNull();
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                otherJob))
+                .isEqualTo(other);
+        assertThatThrownBy(() -> globalEmbeddingJob(subject))
+                .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> globalEmbeddingJob(null)).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "UPDATE reembedding_job SET requested_by = ? WHERE id = ?",
+                                        subject,
+                                        job))
+                .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "UPDATE reembedding_job SET requested_by = ? WHERE id = ?",
+                                        other,
+                                        job))
+                .isInstanceOf(DataAccessException.class);
+        assertThat(revocations.revoked(subject)).isTrue();
+        assertThat(revocations.revoked(other)).isFalse();
+    }
+
+    @Test
+    void rollingBackRemovalAlsoRestoresTheGlobalJobRequesterAndItsAdmission() {
+        String subject = subject();
+        UUID job = globalEmbeddingJob(subject);
+        new TransactionTemplate(transactions)
+                .executeWithoutResult(
+                        status -> {
+                            as(subject, removals::request);
+                            assertThat(
+                                            jdbc.queryForObject(
+                                                    "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                                    String.class,
+                                                    job))
+                                    .isNull();
+                            status.setRollbackOnly();
+                        });
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                String.class,
+                                job))
+                .isEqualTo(subject);
+        assertThat(globalEmbeddingJob(subject)).isNotNull();
+        assertThat(revocations.revoked(subject)).isFalse();
+    }
+
+    @Test
+    void anObsoleteRepeatableReadSnapshotCannotRestoreARemovedEmbeddingRequester() {
+        String subject = subject();
+        globalEmbeddingJob(subject);
+        var snapshot = new TransactionTemplate(transactions);
+        snapshot.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        assertThatThrownBy(
+                        () ->
+                                snapshot.executeWithoutResult(
+                                        status -> {
+                                            jdbc.queryForObject(
+                                                    "SELECT count(*) FROM identity_authentication",
+                                                    Integer.class);
+                                            try (var executor =
+                                                    Executors.newSingleThreadExecutor()) {
+                                                try {
+                                                    executor.submit(
+                                                                    () ->
+                                                                            as(
+                                                                                    subject,
+                                                                                    removals
+                                                                                            ::request))
+                                                            .get(20, TimeUnit.SECONDS);
+                                                } catch (Exception error) {
+                                                    throw new IllegalStateException(error);
+                                                }
+                                            }
+                                            globalEmbeddingJob(subject);
+                                        }))
+                .isInstanceOf(DataAccessException.class)
+                .rootCause()
+                .isInstanceOf(SQLException.class)
+                .extracting(error -> ((SQLException) error).getSQLState())
+                .isEqualTo("40001");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT count(*) FROM reembedding_job WHERE requested_by = ?",
+                                Integer.class,
+                                subject))
+                .isZero();
+    }
+
+    @Test
+    void removalWaitsForAnAdmittedEmbeddingJobThenErasesItsRequester() throws Exception {
+        String subject = subject();
+        as(subject, identity::currentUserId);
+        var admitted = new CountDownLatch(1);
+        var commit = new CountDownLatch(1);
+        String removalConnection = "removal-race-" + UUID.randomUUID();
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var creation =
+                    executor.submit(
+                            () ->
+                                    new TransactionTemplate(transactions)
+                                            .execute(
+                                                    status -> {
+                                                        UUID job = globalEmbeddingJob(subject);
+                                                        admitted.countDown();
+                                                        try {
+                                                            assertThat(
+                                                                            commit.await(
+                                                                                    20,
+                                                                                    TimeUnit
+                                                                                            .SECONDS))
+                                                                    .isTrue();
+                                                        } catch (InterruptedException error) {
+                                                            Thread.currentThread().interrupt();
+                                                            throw new IllegalStateException(error);
+                                                        }
+                                                        return job;
+                                                    }));
+            assertThat(admitted.await(10, TimeUnit.SECONDS)).isTrue();
+            var removal =
+                    executor.submit(
+                            () ->
+                                    new TransactionTemplate(transactions)
+                                            .execute(
+                                                    status -> {
+                                                        jdbc.queryForObject(
+                                                                "SELECT set_config('application_name', ?, true)",
+                                                                String.class,
+                                                                removalConnection);
+                                                        return as(subject, removals::request);
+                                                    }));
+            try {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                boolean waiting = false;
+                while (System.nanoTime() < deadline) {
+                    waiting =
+                            Boolean.TRUE.equals(
+                                    jdbc.queryForObject(
+                                            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = ? AND wait_event_type = 'Lock')",
+                                            Boolean.class,
+                                            removalConnection));
+                    if (waiting) break;
+                    Thread.sleep(20);
+                }
+                assertThat(waiting)
+                        .as("Removal must wait for the admitted job's transaction")
+                        .isTrue();
+            } finally {
+                commit.countDown();
+            }
+            UUID job = creation.get(20, TimeUnit.SECONDS);
+            assertThat(removal.get(20, TimeUnit.SECONDS)).isNotNull();
+            assertThat(
+                            jdbc.queryForObject(
+                                    "SELECT requested_by FROM reembedding_job WHERE id = ?",
+                                    String.class,
+                                    job))
+                    .isNull();
+            assertThat(revocations.revoked(subject)).isTrue();
+        } finally {
+            commit.countDown();
+        }
+    }
+
+    private UUID globalEmbeddingJob(String requester) {
+        UUID job = UUID.randomUUID();
+        String model = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        jdbc.update(
+                "INSERT INTO embedding_model(model_key, provider, model_id, pipeline_version, dimensions) VALUES (?, 'bedrock', 'test-model', '1', 256)",
+                model);
+        jdbc.update(
+                "INSERT INTO reembedding_job(id, requested_by, request_key, model_key, created_at) VALUES (?, ?, ?, ?, now())",
+                job,
+                requester,
+                UUID.randomUUID(),
+                model);
+        return job;
     }
 
     private static String subject() {

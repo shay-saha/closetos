@@ -54,7 +54,7 @@ class DatabaseMigrationTest {
 
     @Test
     void migratesAnEmptyDatabaseAndSafelyReplaysWithoutStartingSpring() throws Exception {
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(15);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(16);
         assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isZero();
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
                         statement.executeQuery(
                                 "SELECT count(*) FROM flyway_schema_history WHERE success")) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getInt(1)).isEqualTo(15);
+            assertThat(result.getInt(1)).isEqualTo(16);
         }
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -108,7 +108,7 @@ class DatabaseMigrationTest {
                         'arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:garment-image-00000000-0000-4000-8000-000000000004-pipeline-1-r1','PROCESSING_MEDIA',1)
                     """);
         }
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(6);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(7);
         try (var connection = connect();
                 var statement = connection.createStatement();
                 var result =
@@ -186,6 +186,38 @@ class DatabaseMigrationTest {
                     """);
             statement.execute(
                     "UPDATE workflow_task SET stopped_at = now() WHERE stopped_at IS NULL");
+            statement.execute(
+                    """
+                    INSERT INTO embedding_model(model_key, provider, model_id, pipeline_version, dimensions)
+                    VALUES (repeat('a',64), 'bedrock', 'runtime-test', '1', 256)
+                    """);
+            statement.execute(
+                    """
+                    INSERT INTO reembedding_job(id, requested_by, request_key, model_key, created_at)
+                    VALUES ('00000000-0000-4000-8000-000000000008', 'restricted-test',
+                        '00000000-0000-4000-8000-000000000009', repeat('a',64), now())
+                    """);
+            statement.execute(
+                    """
+                    INSERT INTO account_removal(id, subject_hash, owner_id, provider_subject, requested_at, next_attempt_at)
+                    VALUES ('00000000-0000-4000-8000-000000000010', encode(sha256(convert_to('restricted-test', 'UTF8')), 'hex'),
+                        '00000000-0000-4000-8000-000000000001', 'restricted-test', now(), now())
+                    """);
+            try (var result = statement.executeQuery("SELECT requested_by FROM reembedding_job")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isNull();
+            }
+            assertThatThrownBy(
+                            () ->
+                                    statement.execute(
+                                            """
+                    INSERT INTO reembedding_job(id, requested_by, request_key, model_key, created_at)
+                    VALUES ('00000000-0000-4000-8000-000000000011', 'restricted-test',
+                        '00000000-0000-4000-8000-000000000012', repeat('a',64), now())
+                    """))
+                    .isInstanceOf(SQLException.class)
+                    .extracting(error -> ((SQLException) error).getSQLState())
+                    .isEqualTo("23514");
             for (String sql :
                     new String[] {
                         "CREATE TABLE injected(id integer)",
@@ -353,7 +385,7 @@ class DatabaseMigrationTest {
                             ownerPassword,
                             "APPLICATION_DATABASE_PASSWORD",
                             runtimePassword);
-            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(15);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(16);
             assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
             try (var connection =
                             DriverManager.getConnection(
