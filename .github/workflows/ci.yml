@@ -110,12 +110,20 @@ jobs:
       - run: pnpm build
 
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.MEDIA_NATIVE_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Check memory for native processing and local services
+        shell: bash
+        run: |
+          memory_bytes="$(docker info --format '{{.MemTotal}}')"
+          if [[ ! "$memory_bytes" =~ ^[0-9]+$ ]] || (( memory_bytes < 12 * 1024 * 1024 * 1024 )); then
+            echo '::error::Native media checks need at least 12 GiB of Docker host memory. Set MEDIA_NATIVE_RUNNER to a runner label with sufficient memory.'
+            exit 1
+          fi
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true

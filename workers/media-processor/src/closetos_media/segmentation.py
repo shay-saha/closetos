@@ -16,12 +16,19 @@ class BiRefNetSegmentation:
 
     @cached_property
     def session(self):
+        import onnxruntime as ort
         from rembg import new_session
 
+        options = ort.SessionOptions()
+        # Release intermediate allocations instead of retaining a growing CPU arena.
+        options.enable_cpu_mem_arena = False
+        options.enable_mem_pattern = False
+        options.intra_op_num_threads = 2
+        options.inter_op_num_threads = 1
         return new_session(
             self.model_name,
             providers=["CPUExecutionProvider"],
-            sess_opts=None,
+            sess_opts=options,
         )
 
     def mask(self, image: Image.Image) -> Image.Image:

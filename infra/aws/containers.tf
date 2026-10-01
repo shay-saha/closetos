@@ -121,7 +121,7 @@ resource "aws_ecs_task_definition" "media" {
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = 2048
-  memory                   = 4096
+  memory                   = 8192
   task_role_arn            = aws_iam_role.task["media-worker"].arn
   execution_role_arn       = aws_iam_role.execution["media-worker"].arn
   runtime_platform {

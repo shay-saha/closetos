@@ -109,6 +109,10 @@ run "development_runtime_contract" {
     error_message = "Isolate worker permissions and choose the model's region independently of S3/RDS."
   }
   assert {
+    condition     = aws_ecs_task_definition.media[0].cpu == "2048" && aws_ecs_task_definition.media[0].memory == "8192"
+    error_message = "The CPU segmentation worker must use the two CPUs and 8 GiB verified by the native container gate."
+  }
+  assert {
     condition     = jsondecode(aws_sfn_state_machine.media[0].definition).States.RunMediaTransform.Resource == "arn:aws:states:::ecs:runTask.sync" && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunMediaTransform.Parameters.Overrides.ContainerOverrides[0].Command == ["transform"] && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunAIEnrichment.Parameters.Overrides.ContainerOverrides[0].Command == ["enrich"] && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunMediaTransform.ResultPath == null && jsondecode(aws_sfn_state_machine.media[0].definition).States.RunAIEnrichment.ResultPath == null
     error_message = "Run transform and enrichment separately and retain the original job across ECS completion responses."
   }

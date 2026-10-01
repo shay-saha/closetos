@@ -71,7 +71,9 @@ def main():
         "--cpus",
         "2",
         "--memory",
-        "4g",
+        "8g",
+        "--memory-swap",
+        "8g",
     ]
     for name in (
         *credentials,
