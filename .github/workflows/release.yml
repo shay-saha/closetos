@@ -114,14 +114,14 @@ jobs:
             --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
             --service "$SERVICE" --image "$(cat "$RUNNER_TEMP/image-id")" \
             --scan ".security/reports/$SERVICE.json" --destination "$RUNNER_TEMP/release/$SERVICE.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: release-security-${{ matrix.service }}
           path: .security/reports/${{ matrix.service }}.json
           if-no-files-found: warn
           retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: success() && env.PUBLISH_ROLE != ''
         with:
           name: published-image-${{ matrix.service }}
@@ -159,7 +159,7 @@ jobs:
             --application "$RELEASE_APPLICATION" --environment "$RELEASE_ENVIRONMENT" \
             --source "$SOURCE_COMMIT" --publication "$PUBLICATION_ID" \
             --directory "$RUNNER_TEMP/published-images" --destination "$RUNNER_TEMP/release.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-manifest
           path: ${{ runner.temp }}/release.json
