@@ -1,8 +1,9 @@
+import { appOrigin } from "./environment";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { register } from "./register";
 
-const origin = { Origin: "http://localhost:3000" };
+const origin = { Origin: appOrigin };
 type Piece = { id: string; name: string; category: string; version: number; status: string };
 async function seed(page: Page) {
   const pieces: Piece[] = [];

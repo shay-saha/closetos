@@ -1,9 +1,10 @@
+import { appOrigin } from "./environment";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { randomUUID } from "node:crypto";
 import { register } from "./register";
 
-const origin = { Origin: "http://localhost:3000" };
+const origin = { Origin: appOrigin };
 async function prepare(page: Page) {
   await register(page);
   const purchased = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);

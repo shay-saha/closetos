@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
@@ -115,7 +116,7 @@ test("200-piece rail stays virtualised and responds to pointer gestures", async 
     const results = await Promise.all(
       Array.from({ length: 10 }, (_, index) =>
         page.request.post("/api/backend/garments", {
-          headers: { Origin: "http://localhost:3000" },
+          headers: { Origin: appOrigin },
           data: { name: `Rail piece ${batch * 10 + index}`, category: "TOP" },
         }),
       ),

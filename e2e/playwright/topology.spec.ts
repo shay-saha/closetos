@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { register } from "./register";
@@ -18,7 +19,7 @@ async function prepare(page: Page) {
   const pieces: { id: string }[] = [];
   for (const data of examples) {
     const response = await page.request.post("/api/backend/garments", {
-      headers: { Origin: "http://localhost:3000" },
+      headers: { Origin: appOrigin },
       data,
     });
     expect(response.status()).toBe(201);

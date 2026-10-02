@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { register } from "./register";
@@ -8,7 +9,7 @@ test("studio persists pointer and keyboard arrangements, duplicates outfits, and
 }) => {
   test.setTimeout(120_000);
   await register(page);
-  const headers = { Origin: "http://localhost:3000" };
+  const headers = { Origin: appOrigin };
   const top = await (
     await page.request.post("/api/backend/garments", {
       headers,
@@ -149,7 +150,7 @@ test("wear retry after a lost response records one event and removal repairs gar
   await register(page);
   const garment = await (
     await page.request.post("/api/backend/garments", {
-      headers: { Origin: "http://localhost:3000" },
+      headers: { Origin: appOrigin },
       data: { name: "Well worn knit", category: "TOP", purchasePrice: 60, purchaseCurrency: "GBP" },
     })
   ).json();

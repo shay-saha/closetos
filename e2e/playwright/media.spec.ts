@@ -1,3 +1,4 @@
+import { appOrigin, storageOrigin } from "./environment";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
@@ -14,7 +15,7 @@ test("capture queue survives an interrupted upload and refresh, then opens metad
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(accessibility.violations).toEqual([]);
-  await page.route("http://localhost:9000/**", async (route) => {
+  await page.route(`${storageOrigin}/**`, async (route) => {
     if (route.request().method() === "PUT") await route.abort("failed");
     else await route.continue();
   });
@@ -27,7 +28,7 @@ test("capture queue survives an interrupted upload and refresh, then opens metad
   await page.reload();
   await expect(page.getByText("shirt.png", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
-  await page.unroute("http://localhost:9000/**");
+  await page.unroute(`${storageOrigin}/**`);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(page.getByRole("link", { name: "Review your piece" })).toBeVisible({
     timeout: 120_000,
@@ -79,7 +80,7 @@ test("signed direct upload, real isolation, private retrieval, and media cleanup
     checksumSha256: createHash("sha256").update(photograph).digest("base64"),
     imageRole: "FRONT",
   };
-  const headers = { Origin: "http://localhost:3000", "Idempotency-Key": randomUUID() };
+  const headers = { Origin: appOrigin, "Idempotency-Key": randomUUID() };
   const response = await page.request.post("/api/backend/garments/uploads", {
     headers,
     data: request,
@@ -159,7 +160,7 @@ test("signed direct upload, real isolation, private retrieval, and media cleanup
   const removed = await page.request.delete(
     `/api/backend/garments/${garment.id}?version=${garment.version}`,
     {
-      headers: { Origin: "http://localhost:3000" },
+      headers: { Origin: appOrigin },
     },
   );
   expect(removed.status()).toBe(204);

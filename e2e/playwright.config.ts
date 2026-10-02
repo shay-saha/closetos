@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { appOrigin } from "./playwright/environment";
 
 export default defineConfig({
   testDir: "./playwright",
@@ -9,13 +10,14 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: appOrigin,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   webServer: {
     command: "pnpm --filter @closetos/web start",
-    url: "http://localhost:3000/signin",
+    url: `${appOrigin}/signin`,
+    env: { PORT: new URL(appOrigin).port || "3000" },
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

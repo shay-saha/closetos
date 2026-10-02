@@ -1,10 +1,11 @@
+import { appOrigin } from "./environment";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { register } from "./register";
 
-const origin = { Origin: "http://localhost:3000" };
+const origin = { Origin: appOrigin };
 async function reviewedPhoto(page: Page) {
   const photograph = await readFile("e2e/fixtures/shirt.png");
   const created = await page.request.post("/api/backend/garments/uploads", {

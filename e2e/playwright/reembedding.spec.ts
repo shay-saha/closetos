@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { register } from "./register";
@@ -8,7 +9,7 @@ test("ordinary accounts cannot rebuild search and an administrator can retry and
 }, testInfo) => {
   test.setTimeout(120_000);
   const { email } = await register(page);
-  const headers = { Origin: "http://localhost:3000" };
+  const headers = { Origin: appOrigin };
   const wardrobe = await (await page.request.get("/api/backend/wardrobes/current")).json();
   const pieces: { id: string }[] = [];
   for (const name of ["Green cotton shirt", "Blue denim trousers"]) {

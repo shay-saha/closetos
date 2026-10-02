@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { test, expect, type Page } from "@playwright/test";
 import { register } from "./register";
 
@@ -23,7 +24,7 @@ test("canonical edits regenerate embeddings through the real worker and stay pri
 }) => {
   test.setTimeout(120_000);
   await register(page);
-  const headers = { Origin: "http://localhost:3000" };
+  const headers = { Origin: appOrigin };
   const created = await page.request.post("/api/backend/garments", {
     headers,
     data: { name: "Olive cotton shirt", category: "TOP", primaryColourName: "Olive" },
@@ -43,7 +44,7 @@ test("canonical edits regenerate embeddings through the real worker and stay pri
   expect(updated.status()).toBe(200);
   await waitForEmbedding(page, garment.id);
 
-  const stranger = await browser.newContext({ baseURL: "http://localhost:3000" });
+  const stranger = await browser.newContext({ baseURL: appOrigin });
   try {
     const otherPage = await stranger.newPage();
     const anonymous = await otherPage.request.get(`/api/backend/garments/${garment.id}/embedding`);

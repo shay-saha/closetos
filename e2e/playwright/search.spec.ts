@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -92,7 +93,7 @@ async function search(page: Page, params: Record<string, string>) {
 
 async function prepareSearchWardrobe(page: Page) {
   await register(page);
-  const headers = { Origin: "http://localhost:3000" };
+  const headers = { Origin: appOrigin };
   const examples = [
     { name: "Olive cotton shirt", category: "TOP", primaryColourName: "Olive", material: "Cotton" },
     { name: "Sage linen shirt", category: "TOP", primaryColourName: "Green", material: "Linen" },
@@ -238,7 +239,7 @@ test("learned text and photo retrieval find related pieces while filters and wea
   } while (cursor);
   expect(ids.size).toBe(5);
 
-  const stranger = await browser.newContext({ baseURL: "http://localhost:3000" });
+  const stranger = await browser.newContext({ baseURL: appOrigin });
   try {
     const other = await stranger.newPage();
     await register(other);

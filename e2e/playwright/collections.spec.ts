@@ -1,8 +1,9 @@
+import { appOrigin } from "./environment";
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { register } from "./register";
 
-const headers = { Origin: "http://localhost:3000" };
+const headers = { Origin: appOrigin };
 
 test("manual selection and nested smart rules persist and respond to wear history", async ({
   page,

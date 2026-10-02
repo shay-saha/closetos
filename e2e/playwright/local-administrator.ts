@@ -1,10 +1,11 @@
+import { identityOrigin } from "./environment";
 import { loadEnvFile } from "node:process";
 
 export async function setLocalAdministrator(email: string, enabled: boolean) {
   if (!process.env.KC_BOOTSTRAP_ADMIN_PASSWORD) loadEnvFile(".env");
   const password = process.env.KC_BOOTSTRAP_ADMIN_PASSWORD;
   if (!password) throw new Error("Local identity administration is not configured.");
-  const identity = "http://localhost:8081";
+  const identity = identityOrigin;
   const login = await fetch(`${identity}/realms/master/protocol/openid-connect/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

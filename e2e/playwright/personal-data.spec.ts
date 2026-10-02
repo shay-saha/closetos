@@ -1,3 +1,4 @@
+import { appOrigin } from "./environment";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
@@ -9,7 +10,7 @@ test("downloads actual wardrobe data and private retained photographs, with acce
 }) => {
   test.setTimeout(180_000);
   await register(page);
-  const headers = { Origin: "http://localhost:3000" };
+  const headers = { Origin: appOrigin };
   const created = await page.request.post("/api/backend/garments", {
     headers,
     data: {
