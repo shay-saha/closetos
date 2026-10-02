@@ -1,4 +1,4 @@
-.PHONY: setup dependencies api web media-worker test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra test-release test-security-gates install-trivy scan-dependencies scan-codeql format-api
+.PHONY: setup dependencies api web media-worker demo demo-screenshots test-api test-web test-e2e test-worker test-worker-container test-migration-container test-infra test-release test-security-gates install-trivy scan-dependencies scan-codeql format-api
 
 setup:
 	python3 scripts/prepare-local-env.py
@@ -37,6 +37,13 @@ api:
 
 web:
 	pnpm dev
+
+demo:
+	pnpm exec playwright install chromium
+	node scripts/demo.mjs seed
+
+demo-screenshots:
+	node scripts/demo.mjs screenshots
 
 test-web:
 	pnpm check

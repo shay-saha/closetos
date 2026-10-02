@@ -1,4 +1,6 @@
 *.md
+!README.md
+.demo-accounts.json
 docs/
 .env
 .env.*
