@@ -54,7 +54,7 @@ class DatabaseMigrationTest {
 
     @Test
     void migratesAnEmptyDatabaseAndSafelyReplaysWithoutStartingSpring() throws Exception {
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(17);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(18);
         assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isZero();
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
                         statement.executeQuery(
                                 "SELECT count(*) FROM flyway_schema_history WHERE success")) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getInt(1)).isEqualTo(17);
+            assertThat(result.getInt(1)).isEqualTo(18);
         }
         try (var connection = connect();
                 var statement = connection.createStatement();
@@ -108,7 +108,7 @@ class DatabaseMigrationTest {
                         'arn:aws:states:eu-west-2:123456789012:execution:closetos-dev-media:garment-image-00000000-0000-4000-8000-000000000004-pipeline-1-r1','PROCESSING_MEDIA',1)
                     """);
         }
-        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(8);
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(9);
         try (var connection = connect();
                 var statement = connection.createStatement();
                 var result =
@@ -385,7 +385,7 @@ class DatabaseMigrationTest {
                             ownerPassword,
                             "APPLICATION_DATABASE_PASSWORD",
                             runtimePassword);
-            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(17);
+            assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isEqualTo(18);
             assertThat(DatabaseMigration.migrate(configuration).migrationsExecuted).isZero();
             try (var connection =
                             DriverManager.getConnection(
@@ -395,6 +395,46 @@ class DatabaseMigrationTest {
                 assertThat(result.next()).isFalse();
             }
         }
+    }
+
+    @Test
+    void refusesToInventPhotoSourcesForAnAccountAlreadyErasedByThePreviousSchema()
+            throws Exception {
+        Flyway.configure()
+                .dataSource(
+                        environment.get("DATABASE_URL"),
+                        environment.get("DATABASE_USERNAME"),
+                        environment.get("DATABASE_PASSWORD"))
+                .target("017")
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+        try (var connection = connect();
+                var statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO identity_authentication(subject_hash, revoked) VALUES (encode(sha256(convert_to('legacy-erased', 'UTF8')), 'hex'), true)");
+            statement.execute(
+                    """
+                INSERT INTO account_removal(id, subject_hash, owner_id, provider_subject,
+                    requested_at, next_attempt_at, data_erased_at, media_purge_after)
+                VALUES ('00000000-0000-4000-8000-000000000001',
+                    encode(sha256(convert_to('legacy-erased', 'UTF8')), 'hex'),
+                    '00000000-0000-4000-8000-000000000002', 'legacy-erased', now(), now(),
+                    now() - interval '16 minutes', now() - interval '1 minute')
+                """);
+        }
+        assertThatThrownBy(() -> DatabaseMigration.migrate(environment))
+                .hasMessageContaining("Finish existing account removals before upgrading");
+        try (var connection = connect();
+                var statement = connection.createStatement()) {
+            statement.execute(
+                    """
+                UPDATE account_removal SET state = 'COMPLETE', owner_id = NULL,
+                    provider_subject = NULL, workers_drained_at = now(), provider_erased_at = now(),
+                    media_erased_at = now(), completed_at = now()
+                """);
+        }
+        assertThat(DatabaseMigration.migrate(environment).migrationsExecuted).isEqualTo(1);
     }
 
     @Test

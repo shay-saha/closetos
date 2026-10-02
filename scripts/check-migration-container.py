@@ -123,7 +123,7 @@ def main():
             text=True,
             timeout=30,
         )
-        assert result.stdout.strip() == "17|017", (
+        assert result.stdout.strip() == "18|018", (
             "Packaged schema history is incomplete"
         )
         grants = subprocess.run(
@@ -136,7 +136,11 @@ def main():
                     "has_table_privilege(current_user,'expensive_action_policy','UPDATE'), "
                     "has_column_privilege(current_user,'workflow_capacity','maximum_active','UPDATE'), "
                     "has_schema_privilege(current_user,'public','CREATE'), "
-                    "has_database_privilege(current_user,current_database(),'TEMP');"
+                    "has_database_privilege(current_user,current_database(),'TEMP'); "
+                    "SELECT has_table_privilege(current_user,'account_removal_source','SELECT'), "
+                    "has_table_privilege(current_user,'account_removal_source','INSERT'), "
+                    "has_table_privilege(current_user,'account_removal_source','DELETE'), "
+                    "has_table_privilege(current_user,'account_removal_source','UPDATE');"
                 ),
             ],
             check=True,
@@ -144,9 +148,13 @@ def main():
             text=True,
             timeout=30,
         )
-        assert grants.stdout.strip().splitlines() == ["SET", "0", "4", "f|f|f|f|f"], (
-            "Packaged migration did not install restricted application grants"
-        )
+        assert grants.stdout.strip().splitlines() == [
+            "SET",
+            "0",
+            "4",
+            "f|f|f|f|f",
+            "t|t|t|f",
+        ], "Packaged migration did not install restricted application grants"
         subprocess.run(
             [
                 *inspection,
@@ -170,7 +178,7 @@ def main():
             and "checksum mismatch" in rejected.stdout + rejected.stderr
         )
         print(
-            "Migration container passed: 17 migrations, safe replay, restricted runtime grants, changed-checksum refusal; no web startup"
+            "Migration container passed: 18 migrations, safe replay, restricted runtime grants, changed-checksum refusal; no web startup"
         )
     finally:
         subprocess.run(

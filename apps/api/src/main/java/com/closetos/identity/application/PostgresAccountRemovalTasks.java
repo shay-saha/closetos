@@ -1,15 +1,19 @@
 package com.closetos.identity.application;
 
 import com.closetos.identity.api.AccountRemovalTasks;
+import com.closetos.platform.api.AccountRemovalPreparation;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -21,11 +25,13 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
     private final JdbcClient jdbc;
     private final Clock clock;
     private final Duration mediaGrace;
+    private final List<AccountRemovalPreparation> preparations;
 
     public PostgresAccountRemovalTasks(
             JdbcClient jdbc,
             Clock clock,
-            @Value("${closetos.privacy.media-grace:PT16M}") Duration mediaGrace) {
+            @Value("${closetos.privacy.media-grace:PT16M}") Duration mediaGrace,
+            List<AccountRemovalPreparation> preparations) {
         if (mediaGrace == null
                 || mediaGrace.compareTo(Duration.ofMinutes(15)) < 0
                 || mediaGrace.compareTo(Duration.ofDays(1)) > 0)
@@ -34,10 +40,11 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
         this.jdbc = jdbc;
         this.clock = clock;
         this.mediaGrace = mediaGrace;
+        this.preparations = List.copyOf(preparations);
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public Optional<Work> claim() {
         var now = clock.instant();
         return jdbc.sql(
@@ -59,7 +66,7 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public Optional<Work> eraseData(Work work) {
         var current = owned(work);
         if (current.isEmpty() || current.get().dataErasedAt() != null) return current;
@@ -70,6 +77,7 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
                         .optional();
         if (subject.isPresent() && !subject.get().equals(work.providerSubject()))
             throw new IllegalStateException("Account removal does not match its profile.");
+        for (var preparation : preparations) preparation.prepare(work.requestId(), work.ownerId());
         jdbc.sql("DELETE FROM user_profile WHERE id = :owner AND cognito_sub = :subject")
                 .param("owner", work.ownerId())
                 .param("subject", work.providerSubject())
@@ -91,7 +99,7 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public Optional<Work> checkpoint(Work work, Step step) {
         String column =
                 switch (step) {
@@ -122,7 +130,7 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public boolean defer(Work work, Failure failure, Duration delay) {
         if (failure == null
                 || delay == null
@@ -143,7 +151,7 @@ public class PostgresAccountRemovalTasks implements AccountRemovalTasks {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public boolean complete(Work work) {
         return bind(
                                 jdbc.sql(

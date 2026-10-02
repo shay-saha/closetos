@@ -233,7 +233,7 @@ public class MediaService implements MediaAccess {
                 id,
                 "DELETE_MEDIA",
                 "delete-media:" + id,
-                Map.of("prefix", image.prefix()));
+                Map.of("prefix", image.prefix(), "sourceKey", image.sourceS3Key()));
         jdbc.sql("DELETE FROM garment_image WHERE id = :id AND wardrobe_id = :wardrobe")
                 .param("id", id)
                 .param("wardrobe", wardrobe)

@@ -11,12 +11,14 @@ import com.closetos.identity.api.AccountRemovalTasks.Step;
 import com.closetos.identity.api.AccountRemovalTasks.Work;
 import com.closetos.identity.api.IdentityAccess;
 import com.closetos.identity.application.PostgresAccountRemovalTasks;
+import com.closetos.platform.api.AccountRemovalPreparation;
 import com.closetos.platform.api.IdentityRevocations;
 import com.closetos.platform.api.OutboxAccess;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -47,6 +49,7 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
     @Autowired JdbcClient jdbc;
     @Autowired OutboxAccess outbox;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired List<AccountRemovalPreparation> preparations;
     @MockitoBean Clock clock;
     private final AtomicReference<Instant> now = new AtomicReference<>();
     private AccountRemovalTasks replica;
@@ -61,7 +64,8 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
         advice.setTransactionAttributeSource(new AnnotationTransactionAttributeSource());
         var proxy =
                 new ProxyFactory(
-                        new PostgresAccountRemovalTasks(jdbc, clock, Duration.ofMinutes(16)));
+                        new PostgresAccountRemovalTasks(
+                                jdbc, clock, Duration.ofMinutes(16), preparations));
         proxy.setProxyTargetClass(true);
         proxy.addAdvice(advice);
         replica = (AccountRemovalTasks) proxy.getProxy();
@@ -276,8 +280,192 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
                                         .update())
                 .isInstanceOf(DataAccessException.class);
         assertThatThrownBy(
-                        () -> new PostgresAccountRemovalTasks(jdbc, clock, Duration.ofMinutes(10)))
+                        () ->
+                                new PostgresAccountRemovalTasks(
+                                        jdbc, clock, Duration.ofMinutes(10), preparations))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void photoSourcesSurviveTheCascadeIncludeDeletedImagesAndDisappearOnCompletion() {
+        String subject = "photo-removal-" + UUID.randomUUID();
+        UUID owner = as(subject, identity::currentUserId);
+        UUID scope = wardrobe(owner);
+        String current = photo(owner, scope);
+        String historical = photoPrefix(owner) + "original.png";
+        String discarded = photoPrefix(owner) + "original.heic";
+        String removed = photoPrefix(owner) + "original.jpeg";
+        String legacy = photoPrefix(owner);
+        event(scope, "START_PROCESSING", Map.of("sourceKey", historical));
+        event(scope, "START_PROCESSING", Map.of("sourceKey", current));
+        event(scope, "DELETE_ORIGINAL", Map.of("sourceKey", discarded));
+        event(
+                scope,
+                "DELETE_MEDIA",
+                Map.of(
+                        "sourceKey",
+                        removed,
+                        "prefix",
+                        removed.substring(0, removed.lastIndexOf('/') + 1)));
+        event(scope, "DELETE_MEDIA", Map.of("prefix", legacy));
+        jdbc.sql("UPDATE outbox_event SET published_at = now() WHERE wardrobe_id = :scope")
+                .param("scope", scope)
+                .update();
+        UUID other = as("other-photo-" + UUID.randomUUID(), identity::currentUserId);
+        UUID otherScope = wardrobe(other);
+        String otherPhoto = photo(other, otherScope);
+        event(otherScope, "START_PROCESSING", Map.of("sourceKey", otherPhoto));
+        as(subject, requests::request);
+        var work = tasks.eraseData(tasks.claim().orElseThrow()).orElseThrow();
+        var expected = new java.util.HashSet<>(List.of(current, historical, discarded, removed));
+        for (String extension : List.of("jpg", "jpeg", "png", "webp", "heic", "heif"))
+            expected.add(legacy + "original." + extension);
+        assertThat(sources(work)).containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(count("user_profile", owner)).isZero();
+        assertThat(count("wardrobe", otherScope)).isEqualTo(1);
+        assertThat(sources(tasks.eraseData(work).orElseThrow())).hasSize(10);
+        tasks.checkpoint(work, Step.WORKERS).orElseThrow();
+        tasks.checkpoint(work, Step.PROVIDER).orElseThrow();
+        assertThat(tasks.defer(work, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16))).isTrue();
+        now.set(work.mediaPurgeAfter());
+        var resumed = tasks.claim().orElseThrow();
+        var purged = tasks.checkpoint(resumed, Step.MEDIA).orElseThrow();
+        assertThat(tasks.complete(purged)).isTrue();
+        assertThat(sources(purged)).isEmpty();
+    }
+
+    @Test
+    void malformedOrCrossOwnerCleanupSourcesRollBackErasureAndItsPreparedKeys() {
+        String subject = "bad-photo-removal-" + UUID.randomUUID();
+        UUID owner = as(subject, identity::currentUserId);
+        UUID scope = wardrobe(owner);
+        photo(owner, scope);
+        UUID event =
+                event(
+                        scope,
+                        "START_PROCESSING",
+                        Map.of("sourceKey", photoPrefix(UUID.randomUUID()) + "original.png"));
+        as(subject, requests::request);
+        var work = tasks.claim().orElseThrow();
+        assertThatThrownBy(() -> tasks.eraseData(work)).isInstanceOf(DataAccessException.class);
+        assertThat(count("user_profile", owner)).isEqualTo(1);
+        assertThat(sources(work)).isEmpty();
+        assertThat(
+                        jdbc.sql(
+                                        "SELECT data_erased_at IS NULL FROM account_removal WHERE id = :id")
+                                .param("id", work.requestId())
+                                .query(Boolean.class)
+                                .single())
+                .isTrue();
+        jdbc.sql(
+                        "UPDATE outbox_event SET payload = jsonb_build_object('sourceKey', :key::text) WHERE id = :id")
+                .param("key", photoPrefix(owner) + "../original.png")
+                .param("id", event)
+                .update();
+        assertThatThrownBy(() -> tasks.eraseData(work)).isInstanceOf(DataAccessException.class);
+        assertThat(count("user_profile", owner)).isEqualTo(1);
+        jdbc.sql("DELETE FROM outbox_event WHERE id = :id").param("id", event).update();
+        assertThat(tasks.eraseData(work)).isPresent();
+        assertThat(sources(work)).hasSize(1);
+    }
+
+    @Test
+    void cleanupUsesFreshCommittedDataAndSurvivesAnOuterRepeatableReadRollback() {
+        String subject = "snapshot-photo-removal-" + UUID.randomUUID();
+        UUID owner = as(subject, identity::currentUserId);
+        UUID scope = wardrobe(owner);
+        as(subject, requests::request);
+        var late = new AtomicReference<String>();
+        var removed = new AtomicReference<Work>();
+        var outer = new TransactionTemplate(transactions);
+        outer.setIsolationLevel(
+                org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        outer.executeWithoutResult(
+                status -> {
+                    assertThat(
+                                    jdbc.sql(
+                                                    "SELECT count(*) FROM garment_image WHERE user_id = :owner")
+                                            .param("owner", owner)
+                                            .query(Integer.class)
+                                            .single())
+                            .isZero();
+                    var writer = new TransactionTemplate(transactions);
+                    writer.setPropagationBehavior(
+                            org.springframework.transaction.TransactionDefinition
+                                    .PROPAGATION_REQUIRES_NEW);
+                    writer.executeWithoutResult(inner -> late.set(photo(owner, scope)));
+                    var work = tasks.claim().orElseThrow();
+                    removed.set(tasks.eraseData(work).orElseThrow());
+                    status.setRollbackOnly();
+                });
+        assertThat(count("user_profile", owner)).isZero();
+        assertThat(sources(removed.get())).containsExactly(late.get());
+        assertThat(
+                        jdbc.sql(
+                                        "SELECT data_erased_at IS NOT NULL AND lease_token = :token FROM account_removal WHERE id = :id")
+                                .param("id", removed.get().requestId())
+                                .param("token", removed.get().leaseToken())
+                                .query(Boolean.class)
+                                .single())
+                .isTrue();
+    }
+
+    private List<String> sources(Work work) {
+        return jdbc.sql("SELECT source_key FROM account_removal_source WHERE request_id = :id")
+                .param("id", work.requestId())
+                .query(String.class)
+                .list();
+    }
+
+    private String photo(UUID owner, UUID scope) {
+        UUID garment = UUID.randomUUID(), image = UUID.randomUUID();
+        String key =
+                "users/" + owner + "/garments/" + garment + "/images/" + image + "/original.png";
+        jdbc.sql(
+                        "INSERT INTO garment(id, wardrobe_id, name, category, created_at, updated_at) VALUES (:id, :scope, 'Private photo', 'TOP', now(), now())")
+                .param("id", garment)
+                .param("scope", scope)
+                .update();
+        jdbc.sql(
+                        """
+            INSERT INTO garment_image(id, garment_id, wardrobe_id, user_id, image_role,
+                original_filename, mime_type, source_s3_key, expected_size, source_checksum,
+                upload_key, processing_status)
+            VALUES (:id, :garment, :scope, :owner, 'FRONT', 'private.png', 'image/png', :key,
+                10, :checksum, :upload, 'AWAITING_UPLOAD')
+            """)
+                .param("id", image)
+                .param("garment", garment)
+                .param("scope", scope)
+                .param("owner", owner)
+                .param("key", key)
+                .param("checksum", "A".repeat(43) + "=")
+                .param("upload", UUID.randomUUID())
+                .update();
+        return key;
+    }
+
+    private String photoPrefix(UUID owner) {
+        return "users/"
+                + owner
+                + "/garments/"
+                + UUID.randomUUID()
+                + "/images/"
+                + UUID.randomUUID()
+                + "/";
+    }
+
+    private UUID event(UUID scope, String type, Map<String, String> payload) {
+        String key = "photo-removal:" + UUID.randomUUID();
+        new TransactionTemplate(transactions)
+                .executeWithoutResult(
+                        status ->
+                                outbox.enqueue(
+                                        scope, "image", UUID.randomUUID(), type, key, payload));
+        return jdbc.sql("SELECT id FROM outbox_event WHERE idempotency_key = :key")
+                .param("key", key)
+                .query(UUID.class)
+                .single();
     }
 
     @Test

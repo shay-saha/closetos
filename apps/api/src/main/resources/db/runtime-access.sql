@@ -58,3 +58,5 @@ GRANT UPDATE (owner_id, provider_subject, state, next_attempt_at, lease_until, a
 
 GRANT SELECT, INSERT ON TABLE workflow_task TO closetos_app;
 GRANT UPDATE (stopped_at) ON TABLE workflow_task TO closetos_app;
+
+GRANT SELECT, INSERT, DELETE ON TABLE account_removal_source TO closetos_app;
