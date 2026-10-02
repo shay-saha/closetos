@@ -90,6 +90,12 @@ resource "aws_iam_role_policy" "api" {
         ] } }
       },
       {
+        Sid      = "EraseOwnMediaCache"
+        Effect   = "Allow"
+        Action   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+        Resource = aws_cloudfront_distribution.media.arn
+      },
+      {
         Sid      = "StartMediaWorkflow"
         Effect   = "Allow"
         Action   = ["states:StartExecution"]

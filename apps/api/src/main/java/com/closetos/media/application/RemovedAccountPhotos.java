@@ -1,7 +1,8 @@
 package com.closetos.media.application;
 
-import com.closetos.media.api.AccountPhotoStorage;
+import com.closetos.media.api.AccountPhotoErasure;
 import com.closetos.media.api.ObjectStoragePort;
+import com.closetos.media.api.PhotoCachePort;
 import com.closetos.platform.api.MediaErasureAdmission;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -10,16 +11,21 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class RemovedAccountPhotoStorage implements AccountPhotoStorage {
+class RemovedAccountPhotos implements AccountPhotoErasure {
     private final JdbcClient jdbc;
     private final ObjectStoragePort storage;
     private final MediaErasureAdmission admission;
+    private final PhotoCachePort cache;
 
-    RemovedAccountPhotoStorage(
-            JdbcClient jdbc, ObjectStoragePort storage, MediaErasureAdmission admission) {
+    RemovedAccountPhotos(
+            JdbcClient jdbc,
+            ObjectStoragePort storage,
+            MediaErasureAdmission admission,
+            PhotoCachePort cache) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.admission = admission;
+        this.cache = cache;
     }
 
     @Override
@@ -33,6 +39,7 @@ class RemovedAccountPhotoStorage implements AccountPhotoStorage {
                         .query(String.class)
                         .list();
         storage.eraseOwner(owner, originals);
-        return true;
+        if (!admission.allowed(request, owner, lease)) return false;
+        return cache.erase(request, owner);
     }
 }

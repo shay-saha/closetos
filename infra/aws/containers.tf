@@ -51,6 +51,7 @@ locals {
     MEDIA_INGEST_QUEUE_URL                             = aws_sqs_queue.media["media-ingest"].url
     MEDIA_RESULT_QUEUE_URL                             = aws_sqs_queue.media["media-results"].url
     CLOUDFRONT_DOMAIN                                  = aws_cloudfront_distribution.media.domain_name
+    CLOUDFRONT_DISTRIBUTION_ID                         = aws_cloudfront_distribution.media.id
     CLOUDFRONT_KEY_ID                                  = aws_cloudfront_public_key.media.id
     BEDROCK_EMBEDDING_MODEL_ID                         = var.embedding_model_arn
     BEDROCK_EMBEDDING_REGION                           = split(":", var.embedding_model_arn)[3]

@@ -73,6 +73,7 @@ export function checkApplicationBoundaries(resources) {
   const machine = `arn:aws:states:${region}:${account}:stateMachine:${name}-media`;
   const queue = (key) => `arn:aws:sqs:${region}:${account}:${name}-${key}`;
   const key = `arn:aws:kms:${region}:${account}:key/example`;
+  const distribution = `arn:aws:cloudfront::${account}:distribution/EXAMPLE`;
   for (const role of roles) {
     assert.equal(boundaries[role].name, `${name}-${role}-permissions-boundary`);
     assert.equal(boundaries[role].policy.Version, "2012-10-17");
@@ -102,6 +103,21 @@ export function checkApplicationBoundaries(resources) {
       expect(role, action, roleArn(role), false);
     }
     expect(role, "s3:PutBucketPolicy", bucket, false);
+    for (const action of ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]) {
+      expect(role, action, distribution, role === "api-task");
+      expect(role, action, distribution, false, {});
+      expect(role, action, distribution.replace(account, "999999999999"), false);
+      expect(role, action, distribution, false, {
+        ...context,
+        "aws:ResourceTag/Environment": "another-environment",
+      });
+      expect(role, action, distribution, false, {
+        ...context,
+        "aws:ResourceTag/Application": "another-application",
+      });
+    }
+    expect(role, "cloudfront:UpdateDistribution", distribution, false);
+    expect(role, "cloudfront:TagResource", distribution, false);
     expect(
       role,
       "ecs:UpdateService",

@@ -16,9 +16,10 @@ import com.closetos.identity.api.AccountRemovalTasks.Step;
 import com.closetos.identity.api.AccountRemovalTasks.Work;
 import com.closetos.identity.api.IdentityAccess;
 import com.closetos.identity.application.PostgresAccountRemovalTasks;
-import com.closetos.media.api.AccountPhotoStorage;
+import com.closetos.media.api.AccountPhotoErasure;
 import com.closetos.media.api.MediaErasurePending;
 import com.closetos.media.api.ObjectStoragePort;
+import com.closetos.media.api.PhotoCachePort;
 import com.closetos.platform.api.AccountRemovalPreparation;
 import com.closetos.platform.api.IdentityRevocations;
 import com.closetos.platform.api.OutboxAccess;
@@ -58,8 +59,9 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
     @Autowired OutboxAccess outbox;
     @Autowired PlatformTransactionManager transactions;
     @Autowired List<AccountRemovalPreparation> preparations;
-    @Autowired AccountPhotoStorage photos;
+    @Autowired AccountPhotoErasure photos;
     @MockitoBean ObjectStoragePort storage;
+    @MockitoBean PhotoCachePort cache;
     @MockitoBean Clock clock;
     private final AtomicReference<Instant> now = new AtomicReference<>();
     private AccountRemovalTasks replica;
@@ -68,6 +70,7 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
     void independentReplicaWithControlledTime() {
         now.set(Instant.now().truncatedTo(ChronoUnit.MICROS));
         when(clock.instant()).thenAnswer(invocation -> now.get());
+        when(cache.erase(any(), any())).thenReturn(true);
         jdbc.sql("DELETE FROM account_removal").update();
         var advice = new TransactionInterceptor();
         advice.setTransactionManager(transactions);
@@ -497,12 +500,13 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
         assertThat(photos.erase(resumed.requestId(), UUID.randomUUID(), resumed.leaseToken()))
                 .isFalse();
         assertThat(photos.erase(UUID.randomUUID(), owner, resumed.leaseToken())).isFalse();
-        verifyNoInteractions(storage);
+        verifyNoInteractions(storage, cache);
         assertThat(photos.erase(resumed.requestId(), owner, resumed.leaseToken())).isTrue();
         verify(storage).eraseOwner(owner, List.of(key));
+        verify(cache).erase(resumed.requestId(), owner);
         now.set(resumed.leaseUntil());
         assertThat(photos.erase(resumed.requestId(), owner, resumed.leaseToken())).isFalse();
-        verifyNoMoreInteractions(storage);
+        verifyNoMoreInteractions(storage, cache);
     }
 
     @Test
@@ -574,6 +578,7 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
                                         resumed.ownerId(),
                                         resumed.leaseToken()))
                 .isInstanceOf(MediaErasurePending.class);
+        verifyNoInteractions(cache);
         assertThat(
                         jdbc.sql(
                                         "SELECT media_erased_at IS NULL FROM account_removal WHERE id = :id")
@@ -581,6 +586,54 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
                                 .query(Boolean.class)
                                 .single())
                 .isTrue();
+    }
+
+    @Test
+    void cachedPhotosMustBeConfirmedErasedAfterStorageBeforeMediaCanFinish() {
+        request();
+        var work = tasks.eraseData(tasks.claim().orElseThrow()).orElseThrow();
+        tasks.checkpoint(work, Step.WORKERS).orElseThrow();
+        tasks.defer(work, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16));
+        now.set(work.mediaPurgeAfter());
+        var resumed = tasks.claim().orElseThrow();
+        when(cache.erase(resumed.requestId(), resumed.ownerId())).thenReturn(false, true);
+        assertThat(photos.erase(resumed.requestId(), resumed.ownerId(), resumed.leaseToken()))
+                .isFalse();
+        assertThat(
+                        jdbc.sql(
+                                        "SELECT media_erased_at IS NULL FROM account_removal WHERE id = :id")
+                                .param("id", resumed.requestId())
+                                .query(Boolean.class)
+                                .single())
+                .isTrue();
+        assertThat(photos.erase(resumed.requestId(), resumed.ownerId(), resumed.leaseToken()))
+                .isTrue();
+        var order = org.mockito.Mockito.inOrder(storage, cache);
+        order.verify(storage).eraseOwner(resumed.ownerId(), List.of());
+        order.verify(cache).erase(resumed.requestId(), resumed.ownerId());
+        order.verify(storage).eraseOwner(resumed.ownerId(), List.of());
+        order.verify(cache).erase(resumed.requestId(), resumed.ownerId());
+    }
+
+    @Test
+    void leaseExpiryDuringStorageErasureCannotStartCacheErasure() {
+        request();
+        var work = tasks.eraseData(tasks.claim().orElseThrow()).orElseThrow();
+        tasks.checkpoint(work, Step.WORKERS).orElseThrow();
+        tasks.defer(work, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16));
+        now.set(work.mediaPurgeAfter());
+        var resumed = tasks.claim().orElseThrow();
+        org.mockito.Mockito.doAnswer(
+                        call -> {
+                            now.set(resumed.leaseUntil());
+                            return null;
+                        })
+                .when(storage)
+                .eraseOwner(any(), any());
+        assertThat(photos.erase(resumed.requestId(), resumed.ownerId(), resumed.leaseToken()))
+                .isFalse();
+        verify(storage).eraseOwner(resumed.ownerId(), List.of());
+        verifyNoInteractions(cache);
     }
 
     @Test

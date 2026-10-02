@@ -116,12 +116,19 @@ run "least_privilege_service_and_workflow_roles" {
     ]
   }
   assert {
+    condition = length([for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement
+      if statement.Sid == "EraseOwnMediaCache" && statement.Resource == aws_cloudfront_distribution.media.arn
+      && toset(statement.Action) == toset(["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"])
+    ]) == 1
+    error_message = "Only invalidate and observe the application's own media distribution."
+  }
+  assert {
     condition     = toset(keys(aws_iam_role.task)) == toset(["api", "web", "media-worker"]) && alltrue([for role in aws_iam_role.task : jsondecode(role.assume_role_policy).Statement[0].Principal.Service == "ecs-tasks.amazonaws.com" && jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"] == "123456789012" && jsondecode(role.assume_role_policy).Statement[0].Condition.ArnLike["aws:SourceArn"] == "arn:aws:ecs:eu-west-2:123456789012:*"])
     error_message = "Use distinct application task roles with account-scoped ECS trust."
   }
   assert {
     condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Action])) == toset([
-      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:ListBucket", "s3:ListBucketVersions", "states:StartExecution", "states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution",
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:ListBucket", "s3:ListBucketVersions", "cloudfront:CreateInvalidation", "cloudfront:GetInvalidation", "states:StartExecution", "states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution",
       "ecs:ListTasks", "ecs:DescribeTasks", "ecs:StopTask",
       "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "kms:Decrypt", "bedrock:InvokeModel"
     ]) && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["InvokeEmbeddingModel"] == var.embedding_model_arn

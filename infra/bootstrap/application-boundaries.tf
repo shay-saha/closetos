@@ -100,6 +100,15 @@ locals {
             "users/*/garments/*/images/*/original.*"
           ] } }
         },
+        {
+          Effect   = "Allow"
+          Action   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+          Resource = "arn:aws:cloudfront::${local.boundary_account}:distribution/*"
+          Condition = { StringEquals = {
+            "aws:ResourceTag/Application" = var.application_name
+            "aws:ResourceTag/Environment" = var.environment
+          } }
+        },
         { Effect = "Allow", Action = ["states:StartExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:stateMachine:${local.boundary_name}-media" },
         { Effect = "Allow", Action = ["states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:execution:${local.boundary_name}-media:*" },
         {

@@ -60,6 +60,7 @@ closetos:
     ingest-queue-url: ${MEDIA_INGEST_QUEUE_URL:}
     result-queue-url: ${MEDIA_RESULT_QUEUE_URL:}
     cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
+    cloudfront-distribution-id: ${CLOUDFRONT_DISTRIBUTION_ID:}
     cloudfront-key-id: ${CLOUDFRONT_KEY_ID:}
     cloudfront-private-key: ${CLOUDFRONT_PRIVATE_KEY:}
   search:

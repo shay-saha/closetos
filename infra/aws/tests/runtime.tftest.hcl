@@ -77,6 +77,10 @@ run "development_runtime_contract" {
   command = apply
   variables { services_enabled = true }
   assert {
+    condition     = { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["CLOUDFRONT_DISTRIBUTION_ID"] == aws_cloudfront_distribution.media.id
+    error_message = "Cache erasure must use the distribution serving the application's private media."
+  }
+  assert {
     condition     = { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["EMBEDDING_PROVIDER"] == "bedrock" && { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["BEDROCK_EMBEDDING_MODEL_ID"] == var.embedding_model_arn && { for item in jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment : item.name => item.value }["BEDROCK_EMBEDDING_REGION"] == "us-east-1"
     error_message = "Use direct Bedrock embeddings with the permitted model and its region, without a permanent worker service."
   }
