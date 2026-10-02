@@ -23,13 +23,13 @@ env:
 
 jobs:
   quality:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && ((inputs.environment == 'prod' && vars.AWS_PROD_PUBLISH_ROLE_ARN != '') || (inputs.environment != 'prod' && vars.AWS_PUBLISH_ROLE_ARN != ''))
     uses: ./.github/workflows/ci.yml
     with:
       release_environment: ${{ inputs.environment || 'dev' }}
 
   security:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && ((inputs.environment == 'prod' && vars.AWS_PROD_PUBLISH_ROLE_ARN != '') || (inputs.environment != 'prod' && vars.AWS_PUBLISH_ROLE_ARN != ''))
     permissions:
       contents: read
       actions: read

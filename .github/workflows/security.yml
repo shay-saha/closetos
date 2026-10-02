@@ -91,6 +91,8 @@ jobs:
           retention-days: 14
 
   codeql:
+    name: CodeQL (${{ matrix.language }})
+    if: inputs.release_environment != '' || !github.event.repository.private || vars.CODEQL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -147,7 +149,7 @@ jobs:
           SARIF_DIRECTORY: ${{ steps.analyze.outputs.sarif-output }}
         run: node scripts/check-codeql-results.mjs "$SARIF_DIRECTORY"
       - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
-        if: always() && steps.analyze.outcome == 'success'
+        if: always() && steps.analyze.outcome == 'success' && (!github.event.repository.private || vars.CODEQL_UPLOAD_ENABLED == 'true')
         with:
           sarif_file: ${{ runner.temp }}/codeql-results
           category: /language:${{ matrix.language }}

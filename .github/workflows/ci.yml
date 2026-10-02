@@ -110,6 +110,8 @@ jobs:
       - run: pnpm build
 
   browser:
+    name: Native browser verification (12 GiB runner)
+    if: inputs.release_environment != '' || !github.event.repository.private || vars.MEDIA_NATIVE_RUNNER != ''
     runs-on: ${{ vars.MEDIA_NATIVE_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
