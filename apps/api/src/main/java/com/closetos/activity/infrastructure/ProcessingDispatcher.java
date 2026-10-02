@@ -2,6 +2,7 @@ package com.closetos.activity.infrastructure;
 
 import com.closetos.activity.application.ProcessingResults;
 import com.closetos.activity.application.ProcessingTransitions;
+import com.closetos.media.api.MediaErasurePending;
 import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.media.api.ProcessingAccess;
 import com.closetos.media.api.WorkflowCapacityUnavailable;
@@ -58,6 +59,9 @@ class ProcessingDispatcher {
                 queue.published(event);
             } catch (WorkflowCapacityUnavailable exception) {
                 queue.defer(event, Duration.ofSeconds(5));
+            } catch (MediaErasurePending exception) {
+                LOG.warn("Media cleanup event {} awaits storage confirmation", event.id());
+                queue.defer(event, Duration.ofSeconds(30));
             } catch (RuntimeException exception) {
                 boolean terminal =
                         exception instanceof DomainException || event.publishAttempts() >= 5;

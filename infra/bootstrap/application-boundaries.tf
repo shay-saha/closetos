@@ -89,12 +89,16 @@ locals {
     api-task = jsonencode({
       Version = "2012-10-17"
       Statement = [
-        { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = "${local.boundary_media}/users/*/garments/*/images/*/*" },
+        { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion"], Resource = "${local.boundary_media}/users/*/garments/*/images/*/*" },
         {
-          Effect    = "Allow"
-          Action    = ["s3:ListBucket"]
-          Resource  = local.boundary_media
-          Condition = { StringLike = { "s3:prefix" = "users/*/garments/*/images/*/" } }
+          Effect   = "Allow"
+          Action   = ["s3:ListBucket", "s3:ListBucketVersions"]
+          Resource = local.boundary_media
+          Condition = { StringLike = { "s3:prefix" = [
+            "users/????????-????-????-????-????????????/",
+            "users/*/garments/*/images/*/",
+            "users/*/garments/*/images/*/original.*"
+          ] } }
         },
         { Effect = "Allow", Action = ["states:StartExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:stateMachine:${local.boundary_name}-media" },
         { Effect = "Allow", Action = ["states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution"], Resource = "arn:aws:states:${var.region}:${local.boundary_account}:execution:${local.boundary_name}-media:*" },

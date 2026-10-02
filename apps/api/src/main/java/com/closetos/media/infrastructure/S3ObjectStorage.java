@@ -8,6 +8,7 @@ import com.closetos.platform.api.MediaSigningAdmission;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,7 @@ class S3ObjectStorage implements ObjectStoragePort {
     private final Clock clock;
     private final String bucket;
     private final MediaSigningAdmission admission;
+    private final S3PhotoErasure erasure;
 
     S3ObjectStorage(
             S3Client s3,
@@ -55,6 +57,7 @@ class S3ObjectStorage implements ObjectStoragePort {
         this.clock = clock;
         this.bucket = bucket;
         this.admission = admission;
+        this.erasure = new S3PhotoErasure(s3, bucket);
     }
 
     @Override
@@ -159,17 +162,16 @@ class S3ObjectStorage implements ObjectStoragePort {
 
     @Override
     public void deletePrefix(String prefix) {
-        if (!prefix.matches("users/[0-9a-f-]{36}/garments/[0-9a-f-]{36}/images/[0-9a-f-]{36}/")) {
-            throw DomainException.invalid("Invalid media prefix.");
-        }
-        for (var page :
-                s3.listObjectsV2Paginator(request -> request.bucket(bucket).prefix(prefix))) {
-            for (var object : page.contents()) delete(object.key());
-        }
+        erasure.image(prefix);
     }
 
     @Override
     public void delete(String key) {
-        s3.deleteObject(request -> request.bucket(bucket).key(key));
+        erasure.original(key);
+    }
+
+    @Override
+    public void eraseOwner(UUID owner, Collection<String> originals) {
+        erasure.owner(owner, originals);
     }
 }

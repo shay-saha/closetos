@@ -2,6 +2,11 @@ package com.closetos;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.closetos.identity.api.AccountRemovalAccess;
@@ -11,6 +16,9 @@ import com.closetos.identity.api.AccountRemovalTasks.Step;
 import com.closetos.identity.api.AccountRemovalTasks.Work;
 import com.closetos.identity.api.IdentityAccess;
 import com.closetos.identity.application.PostgresAccountRemovalTasks;
+import com.closetos.media.api.AccountPhotoStorage;
+import com.closetos.media.api.MediaErasurePending;
+import com.closetos.media.api.ObjectStoragePort;
 import com.closetos.platform.api.AccountRemovalPreparation;
 import com.closetos.platform.api.IdentityRevocations;
 import com.closetos.platform.api.OutboxAccess;
@@ -50,6 +58,8 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
     @Autowired OutboxAccess outbox;
     @Autowired PlatformTransactionManager transactions;
     @Autowired List<AccountRemovalPreparation> preparations;
+    @Autowired AccountPhotoStorage photos;
+    @MockitoBean ObjectStoragePort storage;
     @MockitoBean Clock clock;
     private final AtomicReference<Instant> now = new AtomicReference<>();
     private AccountRemovalTasks replica;
@@ -466,6 +476,111 @@ class AccountRemovalTasksIntegrationTest extends PostgresIntegrationTest {
                 .param("key", key)
                 .query(UUID.class)
                 .single();
+    }
+
+    @Test
+    void accountStorageErasureRequiresWorkerDrainLinkExpiryAndTheCurrentLease() {
+        String subject = "storage-removal-" + UUID.randomUUID();
+        UUID owner = as(subject, identity::currentUserId);
+        String key = photo(owner, wardrobe(owner));
+        as(subject, requests::request);
+        var work = tasks.claim().orElseThrow();
+        assertThat(photos.erase(work.requestId(), owner, work.leaseToken())).isFalse();
+        var erased = tasks.eraseData(work).orElseThrow();
+        assertThat(photos.erase(work.requestId(), owner, work.leaseToken())).isFalse();
+        tasks.checkpoint(erased, Step.WORKERS).orElseThrow();
+        assertThat(photos.erase(work.requestId(), owner, work.leaseToken())).isFalse();
+        tasks.defer(work, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16));
+        now.set(erased.mediaPurgeAfter());
+        var resumed = tasks.claim().orElseThrow();
+        assertThat(photos.erase(resumed.requestId(), owner, work.leaseToken())).isFalse();
+        assertThat(photos.erase(resumed.requestId(), UUID.randomUUID(), resumed.leaseToken()))
+                .isFalse();
+        assertThat(photos.erase(UUID.randomUUID(), owner, resumed.leaseToken())).isFalse();
+        verifyNoInteractions(storage);
+        assertThat(photos.erase(resumed.requestId(), owner, resumed.leaseToken())).isTrue();
+        verify(storage).eraseOwner(owner, List.of(key));
+        now.set(resumed.leaseUntil());
+        assertThat(photos.erase(resumed.requestId(), owner, resumed.leaseToken())).isFalse();
+        verifyNoMoreInteractions(storage);
+    }
+
+    @Test
+    void storageErasureRejectsALeaseReplacedAfterItsCallersSnapshot() {
+        request();
+        var erased = tasks.eraseData(tasks.claim().orElseThrow()).orElseThrow();
+        tasks.checkpoint(erased, Step.WORKERS).orElseThrow();
+        tasks.defer(erased, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16));
+        now.set(erased.mediaPurgeAfter());
+        var first = tasks.claim().orElseThrow();
+        var caller = new TransactionTemplate(transactions);
+        caller.setIsolationLevel(
+                org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        caller.executeWithoutResult(
+                status -> {
+                    assertThat(
+                                    jdbc.sql(
+                                                    "SELECT lease_token FROM account_removal WHERE id = :id")
+                                            .param("id", first.requestId())
+                                            .query(UUID.class)
+                                            .single())
+                            .isEqualTo(first.leaseToken());
+                    assertThat(tasks.defer(first, Failure.MEDIA_PENDING, Duration.ZERO)).isTrue();
+                    var replacement = replica.claim().orElseThrow();
+                    assertThat(photos.erase(first.requestId(), first.ownerId(), first.leaseToken()))
+                            .isFalse();
+                    verifyNoInteractions(storage);
+                    assertThat(
+                                    photos.erase(
+                                            replacement.requestId(),
+                                            replacement.ownerId(),
+                                            replacement.leaseToken()))
+                            .isTrue();
+                    status.setRollbackOnly();
+                });
+        verify(storage).eraseOwner(first.ownerId(), List.of());
+    }
+
+    @Test
+    void aCheckpointCannotPermitPhotoErasureWhileTheProfileStillExists() {
+        request();
+        var work = tasks.claim().orElseThrow();
+        jdbc.sql(
+                        """
+            UPDATE account_removal SET data_erased_at = :now::timestamptz - interval '16 minutes',
+                media_purge_after = :now::timestamptz - interval '1 minute', workers_drained_at = :now
+            WHERE id = :id
+            """)
+                .param("id", work.requestId())
+                .param("now", now.get().atOffset(java.time.ZoneOffset.UTC))
+                .update();
+        assertThat(photos.erase(work.requestId(), work.ownerId(), work.leaseToken())).isFalse();
+        verifyNoInteractions(storage);
+    }
+
+    @Test
+    void unconfirmedStorageErasureCannotProduceASuccessfulCleanupStage() {
+        request();
+        var work = tasks.eraseData(tasks.claim().orElseThrow()).orElseThrow();
+        tasks.checkpoint(work, Step.WORKERS).orElseThrow();
+        tasks.defer(work, Failure.MEDIA_LINKS_ACTIVE, Duration.ofMinutes(16));
+        now.set(work.mediaPurgeAfter());
+        var resumed = tasks.claim().orElseThrow();
+        doThrow(new MediaErasurePending()).when(storage).eraseOwner(any(), any());
+        assertThatThrownBy(
+                        () ->
+                                photos.erase(
+                                        resumed.requestId(),
+                                        resumed.ownerId(),
+                                        resumed.leaseToken()))
+                .isInstanceOf(MediaErasurePending.class);
+        assertThat(
+                        jdbc.sql(
+                                        "SELECT media_erased_at IS NULL FROM account_removal WHERE id = :id")
+                                .param("id", resumed.requestId())
+                                .query(Boolean.class)
+                                .single())
+                .isTrue();
     }
 
     @Test

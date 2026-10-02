@@ -96,6 +96,26 @@ class ProcessingDispatcherTest {
     }
 
     @Test
+    void cleanupDefersUntilStorageConfirmsEvenAfterManyAttempts() {
+        var event =
+                new OutboxEntry(
+                        UUID.randomUUID(),
+                        job.imageId(),
+                        "DELETE_ORIGINAL",
+                        json.writeValueAsString(
+                                java.util.Map.of(
+                                        "sourceKey", job.sourceKey(), "imageId", job.imageId())),
+                        50);
+        when(queue.claim(any())).thenReturn(List.of(event));
+        doThrow(new MediaErasurePending()).when(storage).delete(job.sourceKey());
+        dispatcher.publish();
+        verify(queue).defer(event, Duration.ofSeconds(30));
+        verify(queue, never()).published(any());
+        verify(queue, never()).failed(any(), anyString(), anyBoolean());
+        verify(processing, never()).originalDeleted(any());
+    }
+
+    @Test
     void reservesCapacityBeforeMarkingAndStartingAJob() {
         var event = event(1);
         when(transitions.started(job, null)).thenReturn(true);

@@ -75,15 +75,19 @@ resource "aws_iam_role_policy" "api" {
       {
         Sid      = "OwnedWardrobeMedia"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion"]
         Resource = "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/*"
       },
       {
-        Sid       = "ListOwnedMediaForDeletion"
-        Effect    = "Allow"
-        Action    = ["s3:ListBucket"]
-        Resource  = aws_s3_bucket.media.arn
-        Condition = { StringLike = { "s3:prefix" = "users/*/garments/*/images/*/" } }
+        Sid      = "ListOwnedMediaForDeletion"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:ListBucketVersions"]
+        Resource = aws_s3_bucket.media.arn
+        Condition = { StringLike = { "s3:prefix" = [
+          "users/????????-????-????-????-????????????/",
+          "users/*/garments/*/images/*/",
+          "users/*/garments/*/images/*/original.*"
+        ] } }
       },
       {
         Sid      = "StartMediaWorkflow"

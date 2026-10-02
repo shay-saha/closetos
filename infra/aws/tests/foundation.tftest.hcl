@@ -121,7 +121,7 @@ run "least_privilege_service_and_workflow_roles" {
   }
   assert {
     condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Action])) == toset([
-      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "states:StartExecution", "states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution",
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:ListBucket", "s3:ListBucketVersions", "states:StartExecution", "states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution",
       "ecs:ListTasks", "ecs:DescribeTasks", "ecs:StopTask",
       "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "kms:Decrypt", "bedrock:InvokeModel"
     ]) && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["InvokeEmbeddingModel"] == var.embedding_model_arn
@@ -132,8 +132,8 @@ run "least_privilege_service_and_workflow_roles" {
     error_message = "Workflow recovery may observe only this environment's media executions."
   }
   assert {
-    condition     = { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement }["ListOwnedMediaForDeletion"].Condition.StringLike["s3:prefix"] == "users/*/garments/*/images/*/" && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["OwnedWardrobeMedia"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/*"
-    error_message = "Media listing and access must stay inside wardrobe image prefixes."
+    condition     = toset({ for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement }["ListOwnedMediaForDeletion"].Condition.StringLike["s3:prefix"]) == toset(["users/????????-????-????-????-????????????/", "users/*/garments/*/images/*/", "users/*/garments/*/images/*/original.*"]) && { for statement in jsondecode(aws_iam_role_policy.api.policy).Statement : statement.Sid => statement.Resource }["OwnedWardrobeMedia"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/*"
+    error_message = "Media listing must target individual accounts, images, or originals; object access remains limited to image prefixes."
   }
   assert {
     condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Action])) == toset(["s3:GetObject", "s3:PutObject", "bedrock:InvokeModel"]) && { for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Sid => statement.Resource }["WriteVersionedProcessingOutput"] == "${aws_s3_bucket.media.arn}/users/*/garments/*/images/*/pipelines/*/*" && toset({ for statement in jsondecode(aws_iam_role_policy.worker.policy).Statement : statement.Sid => statement.Resource }["InvokeConfiguredAnalysisModels"]) == var.analysis_model_arns

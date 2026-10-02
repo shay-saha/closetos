@@ -128,12 +128,26 @@ export function checkApplicationBoundaries(resources) {
       "aws:ResourceTag/Environment": "another-environment",
     });
   }
-  for (const action of ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]) {
+  for (const action of [
+    "s3:GetObject",
+    "s3:PutObject",
+    "s3:DeleteObject",
+    "s3:DeleteObjectVersion",
+  ]) {
     expect("api-task", action, original, true);
     expect("api-task", action, `${bucket}/outside-wardrobes.jpg`, false);
   }
-  expect("api-task", "s3:ListBucket", bucket, true);
-  expect("api-task", "s3:ListBucket", bucket, false, { ...context, "s3:prefix": "users/" });
+  for (const action of ["s3:ListBucket", "s3:ListBucketVersions"]) {
+    expect("api-task", action, bucket, true);
+    for (const prefix of ["users/", "users/owner/", "outside/"])
+      expect("api-task", action, bucket, false, { ...context, "s3:prefix": prefix });
+    for (const prefix of [
+      "users/00000000-0000-4000-8000-000000000001/",
+      "users/owner/garments/garment/images/photo/original.png",
+    ])
+      expect("api-task", action, bucket, true, { ...context, "s3:prefix": prefix });
+    expect("media-worker-task", action, bucket, false);
+  }
   expect("api-task", "states:StartExecution", machine, true);
   expect("api-task", "states:StartExecution", machine.replace(name, otherName), false);
   expect("api-task", "sqs:ReceiveMessage", queue("media-results"), true);
@@ -143,6 +157,7 @@ export function checkApplicationBoundaries(resources) {
   expect("media-worker-task", "s3:PutObject", derivative, true);
   expect("media-worker-task", "s3:PutObject", original, false);
   expect("media-worker-task", "s3:DeleteObject", derivative, false);
+  expect("media-worker-task", "s3:DeleteObjectVersion", derivative, false);
   expect("media-worker-task", "secretsmanager:GetSecretValue", secret("database-app"), false);
   expect("media-workflow", "s3:GetObject", original, false);
   for (const role of ["api-task", "media-worker-task"]) {
