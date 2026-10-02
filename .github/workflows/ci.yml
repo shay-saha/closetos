@@ -34,6 +34,7 @@ jobs:
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: "1.16.4"
+          terraform_wrapper: false
       - name: Verify infrastructure formatting, schema, and mocked AWS contracts
         run: make test-infra
       - name: Verify offline release publication and digest checks
