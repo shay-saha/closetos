@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>4.1.1</version>
+    <version>4.1.2</version>
     <relativePath/>
   </parent>
   <groupId>com.closetos</groupId>
@@ -13,7 +13,7 @@
   <properties>
     <java.version>25</java.version>
     <tomcat.version>11.0.26</tomcat.version>
-    <spring-modulith.version>2.1.1</spring-modulith.version>
+    <spring-modulith.version>2.1.2</spring-modulith.version>
     <aws-sdk.version>2.55.9</aws-sdk.version>
     <ortools.version>9.15.6755</ortools.version>
   </properties>
